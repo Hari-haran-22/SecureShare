@@ -1,0 +1,6 @@
+@SecureShare.API_HostAddress = http://localhost:5038
+
+GET {{SecureShare.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

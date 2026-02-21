@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SecureShare.API/SecureShare.API.csproj" />
+  <Project Path="SecureShare.Core/SecureShare.Core.csproj" />
+</Solution>
