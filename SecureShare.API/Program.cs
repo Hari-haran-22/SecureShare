@@ -30,7 +30,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(); // Generates the HTML page
 }
 // ------------------------
-
+app.UseDefaultFiles(); // Looks for index.html
+app.UseStaticFiles();  // Serves files from the wwwroot folder
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
