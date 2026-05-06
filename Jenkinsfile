@@ -7,6 +7,7 @@ pipeline {
         DOCKER_CRED_ID = 'hari2haran2'
         AWS_CRED_ID = 'aws-ssh-key-id'
         AWS_IP = '16.171.111.162'
+        DOCKER_HOST = 'tcp://localhost:2375'
     }
 
     stages {
