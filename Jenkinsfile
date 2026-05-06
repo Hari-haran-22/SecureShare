@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         // These match the exact IDs you just created in the Jenkins vault
-        IMAGE_NAME = 'Hari2haran2/secureshare-api' 
+        IMAGE_NAME = 'hari2haran2/secureshare-api' 
         DOCKER_CRED_ID = 'hari2haran2'
         AWS_CRED_ID = 'aws-ssh-key-id'
         AWS_IP = '16.171.111.162'
