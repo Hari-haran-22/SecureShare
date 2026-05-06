@@ -19,7 +19,7 @@ builder.Services.AddControllers();
 // We use 'AddSwaggerGen' (Classic), NOT 'AddOpenApi' (New/Raw)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-// -------------------------------------
+
 
 var app = builder.Build();
 
