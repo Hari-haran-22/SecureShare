@@ -7,6 +7,7 @@ pipeline {
         DOCKER_CRED_ID = 'hari2haran2'
         AWS_CRED_ID = 'aws-ssh-key-id'
         AWS_IP = '16.171.111.162'
+        DOCKER_HOST = 'tcp://localhost:2375'
     }
 
     stages {
@@ -21,9 +22,9 @@ pipeline {
         stage('Push to Registry') {
             steps {
                 echo 'Securely logging into Docker Hub and pushing image...'
-                // withCredentials temporarily injects your vault secrets into the environment variables
                 withCredentials([usernamePassword(credentialsId: DOCKER_CRED_ID, passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                    bat "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin"
+                    // Notice there is NO space before the pipe symbol now!
+                    bat "echo %DOCKER_PASS%| docker login -u %DOCKER_USER% --password-stdin"
                     bat "docker push ${IMAGE_NAME}:latest"
                 }
             }
