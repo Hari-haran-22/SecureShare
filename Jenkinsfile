@@ -33,10 +33,13 @@ pipeline {
         stage('Deploy to AWS') {
             steps {
                 echo 'Connecting to AWS server to deploy new container...'
-                withCredentials([sshUserPrivateKey(credentialsId: AWS_CRED_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
-                    // 1. Connect via SSH without prompting for host key verification
-                    // 2. Pull the new image, stop/remove the old container, and start the new one
-                    bat "ssh -o StrictHostKeyChecking=no -i \"%SSH_KEY%\" %SSH_USER%@${AWS_IP} \"sudo docker pull ${IMAGE_NAME}:latest && sudo docker stop secureshare || true && sudo docker rm secureshare || true && sudo docker run -d -p 8080:8080 --name secureshare ${IMAGE_NAME}:latest\""
+                withCredentials([sshUserPrivateKey(credentialsId: 'aws-ssh-key-id', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+                    
+                    // 1. Strip the loose Windows permissions from the temporary key file
+                    bat "icacls \"%SSH_KEY%\" /inheritance:r /grant \"%USERNAME%:R\""
+                    
+                    // 2. Connect via SSH and execute the Docker deployment commands
+                    bat "ssh -o StrictHostKeyChecking=no -i \"%SSH_KEY%\" %SSH_USER%@16.171.111.162 \"sudo docker pull hari2haran2/secureshare-api:latest && sudo docker stop secureshare || true && sudo docker rm secureshare || true && sudo docker run -d -p 8080:8080 --name secureshare hari2haran2/secureshare-api:latest\""
                 }
             }
         }
