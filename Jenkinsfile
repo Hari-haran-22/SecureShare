@@ -23,8 +23,8 @@ pipeline {
             steps {
                 echo 'Securely logging into Docker Hub and pushing image...'
                 withCredentials([usernamePassword(credentialsId: DOCKER_CRED_ID, passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                    // Notice there is NO space before the pipe symbol now!
-                    bat "echo %DOCKER_PASS%| docker login -u %DOCKER_USER% --password-stdin"
+                    // Bypassing the Windows echo pipe by using the direct -p flag
+                    bat "docker login -u %DOCKER_USER% -p \"%DOCKER_PASS%\""
                     bat "docker push ${IMAGE_NAME}:latest"
                 }
             }
