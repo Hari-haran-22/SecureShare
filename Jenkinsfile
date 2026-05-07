@@ -1,6 +1,10 @@
 pipeline {
     agent any
-
+    
+    // Hardcoding the GitHub Webhook trigger directly into the pipeline
+    triggers {
+        githubPush()
+    }
     environment {
         // These match the exact IDs you just created in the Jenkins vault
         IMAGE_NAME = 'hari2haran2/secureshare-api' 
