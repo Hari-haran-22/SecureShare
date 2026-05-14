@@ -43,7 +43,7 @@ pipeline {
                     bat "FOR /F \"tokens=*\" %%i IN ('whoami') DO icacls \"%SSH_KEY%\" /inheritance:r /grant \"%%i:R\""
                     
                     // 2. Connect via SSH and execute the Docker deployment commands
-                    bat "ssh -o StrictHostKeyChecking=no -i \"%SSH_KEY%\" %SSH_USER%@54.235.16.232 \"sudo docker pull hari2haran2/secureshare-api:latest && sudo docker stop secureshare || true && sudo docker rm secureshare || true && sudo docker run -d -p 8080:8080 --name secureshare hari2haran2/secureshare-api:latest\""
+                    bat "ssh -o StrictHostKeyChecking=no -i \"%SSH_KEY%\" %SSH_USER%@54.87.47.79 \"sudo docker pull hari2haran2/secureshare-api:latest && sudo docker stop secureshare || true && sudo docker rm secureshare || true && sudo docker run -d -p 8080:8080 --name secureshare hari2haran2/secureshare-api:latest\""
                 }
             }
         }

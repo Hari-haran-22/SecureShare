@@ -34,7 +34,7 @@ resource "aws_security_group" "secureshare_sg" {
 resource "aws_instance" "secureshare_server" {
   ami           = "ami-0c7217cdde317cfec" 
   instance_type = "t3.micro"              
-  key_name      = "Key_Pair"     
+  key_name      = "terraform-deploy-key"     
 
   vpc_security_group_ids = [aws_security_group.secureshare_sg.id]
 
