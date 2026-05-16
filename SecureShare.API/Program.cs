@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SecureShare.API.Data;
 using SecureShare.API.Services;
 using SecureShare.Core.Interfaces;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
