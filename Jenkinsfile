@@ -10,7 +10,7 @@ pipeline {
         IMAGE_NAME = 'hari2haran2/secureshare-api' 
         DOCKER_CRED_ID = 'docker-hub-id'
         AWS_CRED_ID = 'aws-ssh-key-id'
-        AWS_IP = '16.171.111.162'
+        AWS_IP = '52.207.240.245'
         DOCKER_HOST = 'tcp://127.0.0.1:2375'
     }
 
@@ -43,7 +43,7 @@ pipeline {
                     bat "FOR /F \"tokens=*\" %%i IN ('whoami') DO icacls \"%SSH_KEY%\" /inheritance:r /grant \"%%i:R\""
                     
                     // 2. Connect via SSH and execute the Docker deployment commands
-                    bat "ssh -o StrictHostKeyChecking=no -i \"%SSH_KEY%\" %SSH_USER%@54.87.47.79 \"sudo docker pull hari2haran2/secureshare-api:latest && sudo docker stop secureshare || true && sudo docker rm secureshare || true && sudo docker run -d -p 8080:8080 --name secureshare hari2haran2/secureshare-api:latest\""
+                    bat "ssh -o StrictHostKeyChecking=no -i \"%SSH_KEY%\" %SSH_USER%@%AWS_IP% \"git clone https://github.com/Hari-haran-22/SecureShare.git || (cd SecureShare && git pull) && cd SecureShare && sudo docker pull hari2haran2/secureshare-api:latest && sudo docker compose up -d\""
                 }
             }
         }

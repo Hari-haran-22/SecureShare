@@ -35,5 +35,10 @@ app.UseStaticFiles();  // Serves files from the wwwroot folder
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+// Expose the /metrics endpoint
+app.UseMetricServer();
+
+// Automatically track HTTP request duration, errors, etc.
+app.UseHttpMetrics();
 
 app.Run();
