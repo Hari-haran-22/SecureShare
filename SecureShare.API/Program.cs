@@ -24,6 +24,15 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// --- AUTOMATIC DATABASE MIGRATION (The Missing Piece!) ---
+// This ensures the empty SQL container gets all your tables built when it starts.
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    dbContext.Database.Migrate(); 
+}
+// --
+
 // --- 3. ENABLE THE UI ---
 if (app.Environment.IsDevelopment())
 {

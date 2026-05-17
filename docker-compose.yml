@@ -1,12 +1,27 @@
 version: '3.8'
 
 services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=SuperSecretPassw0rd! # Note: In production, store this in Jenkins credentials!
+    ports:
+      - "1433:1433"
+    restart: always
+
   secureshare-api:
     image: hari2haran2/secureshare-api:latest
     container_name: secureshare-api
     ports:
       - "8080:8080"
     restart: always
+    environment:
+      # This overrides your local appsettings.json and points the API to the new container!
+      - ConnectionStrings__DefaultConnection=Server=db,1433;Database=SecureShareDb;User Id=sa;Password=SuperSecretPassw0rd!;TrustServerCertificate=True;
+    depends_on:
+      - db
 
   prometheus:
     image: prom/prometheus:latest
@@ -24,6 +39,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin # Change this later!
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
