@@ -18,7 +18,7 @@ pipeline {
         stage('Build Image') {
             steps {
                 echo 'Compiling .NET code and building Docker Image...'
-                // 'bat' tells Jenkins to run a Windows command prompt instruction
+                // 'bat' tells Jenkins to run a Windows command prompt instructions
                 bat "docker build -t ${IMAGE_NAME}:latest ."
             }
         }
