@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: 'Default Dashboards'
+    orgId: 1
+    folder: 'SecureShare Metrics'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards # Where the JSON will live inside the container
