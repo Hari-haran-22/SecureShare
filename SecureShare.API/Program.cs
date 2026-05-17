@@ -9,7 +9,15 @@ var builder = WebApplication.CreateBuilder(args);
 // --- 1. SETUP DATABASE & SERVICES ---
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    options.UseSqlServer(connectionString, sqlOptions => 
+    {
+        // Tells the API to retry up to 5 times, waiting between each attempt, 
+        // giving the SQL container plenty of time to boot up!
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null);
+    }));
 
 builder.Services.AddScoped<IFileEncryptionService, FileEncryptionService>();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
