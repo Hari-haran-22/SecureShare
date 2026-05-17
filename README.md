@@ -1,51 +1,162 @@
-# 🔒 SecureShare .NET
+# 🔒 SecureShare
 
-![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)
-![SQL Server](https://img.shields.io/badge/SQL_Server-CC292B?logo=microsoftsqlserver&logoColor=white)
-![C#](https://img.shields.io/badge/C%23-239120?logo=c-sharp&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
-![Jenkins](https://img.shields.io/badge/Jenkins-D24939?logo=jenkins&logoColor=white)
-![AWS EC2](https://img.shields.io/badge/AWS_EC2-FF9900?logo=amazonaws&logoColor=white)
+SecureShare is a highly secure, encrypted file-sharing system built with **.NET 9**. It features a fully automated DevSecOps CI/CD pipeline for seamless containerized deployment to AWS, complete with real-time enterprise observability.
 
-**SecureShare** is a self-hosted, web-based utility designed to share sensitive documents securely over insecure channels. It allows users to upload a file, encrypt it on the server using AES-256, and generate a unique, one-time or time-sensitive download link. Once the file is downloaded or the link expires, the system permanently locks the data.
-
-## ✨ Core Features
-
-* **Server-Side Encryption:** Files are encrypted stream-to-stream using `System.Security.Cryptography` (AES-256) before ever being written to the disk.
-* **Self-Destructing Links:** Links automatically expire based on a user-defined time limit (e.g., 24 hours) or a strict download count (e.g., 1 download only).
-* **Anti-Enumeration Security:** The API uses cryptographically secure GUIDs for download URLs and returns generic `404 Not Found` responses for expired files to prevent IDOR (Insecure Direct Object Reference) and enumeration attacks.
-* **Clean Architecture:** Built with a decoupled Core (business logic) and API (infrastructure) layer, utilizing the Repository Pattern and Dependency Injection.
-* **Integrated Web Portal:** Includes a built-in, responsive HTML/JS frontend to easily upload and generate links without needing third-party tools like Postman.
-* **Containerized Deployment:** Fully dockerized via a multi-stage build for consistent local development and lightweight AWS production environments.
-* **Zero-Touch CI/CD Pipeline:** Fully automated Jenkins pipeline handles compilation, Docker image registry pushes, and secure SSH deployments to the cloud.
-
-## 🛠️ Technology Stack
-
-* **Backend:** ASP.NET Core Web API (.NET 9)
-* **Database:** SQL Server Express
-* **ORM:** Entity Framework Core (Code-First approach)
-* **Frontend:** Vanilla HTML, CSS, and JavaScript (Fetch API)
-* **DevOps & Cloud:** Docker, Docker Hub, Jenkins, Git, AWS EC2 (Ubuntu Linux)
-
-## 🏗️ DevSecOps & CI/CD Architecture
-
-This project implements a strict Continuous Integration and Continuous Deployment (CI/CD) pipeline to ensure reliable, zero-downtime updates:
-1. **Source Control:** Code updates are pushed to the `master` branch on GitHub.
-2. **Continuous Integration:** A Jenkins service fetches the latest commit and compiles the .NET 9 application inside a temporary container to guarantee a clean build.
-3. **Registry Push:** Jenkins securely authenticates via vaulted access tokens and pushes the compiled multi-stage image to Docker Hub (`hari2haran2/secureshare-api`).
-4. **Continuous Deployment:** Jenkins establishes a secure SSH connection to the live AWS EC2 instance, dynamically managing temporary Windows key file permissions (`icacls`), and executes a container swap to launch the live application.
+---
 
 ## 📂 Project Structure
+
 ```text
 SecureShare/
-├── SecureShare.Core/        # Domain layer (No external dependencies)
-│   ├── Entities/            # Database models (FileRecord, AccessLog)
-│   └── Interfaces/          # Contracts (IFileEncryptionService, etc.)
-├── SecureShare.API/         # Application & Infrastructure layer
-│   ├── Controllers/         # API Endpoints (FilesController)
-│   ├── Services/            # AES Encryption & Storage Implementations
-│   ├── Data/                # EF Core ApplicationDbContext
-│   └── wwwroot/             # Frontend web assets (index.html)
-├── Dockerfile               # Multi-stage Docker build configuration
-├── Jenkinsfile              # Declarative CI/CD pipeline script
-└── SecureShare.sln          # Solution file
+├── SecureShare.API/            # Core .NET 9 Web API Application
+│   ├── Controllers/            # API Endpoints
+│   ├── Program.cs              # App entry point & Prometheus middleware
+│   └── SecureShare.API.csproj  # API Project file
+├── SecureShare.Core/           # Class Library (Business Logic & Models)
+│   └── SecureShare.Core.csproj # Core Project file
+├── terraform/                  # Infrastructure as Code (IaC)
+│   └── main.tf                 # AWS EC2 & Security Group provisioning
+├── .gitignore                  # Git rules for .NET, Terraform, & binaries
+├── docker-compose.yml          # Multi-container orchestration (API + Monitoring)
+├── Dockerfile                  # Multi-stage Docker build for the .NET API
+├── Jenkinsfile                 # Declarative CI/CD Pipeline configuration
+├── prometheus.yml              # Prometheus scraping configuration
+└── README.md                   # Project documentation
+
+This is a fantastic idea. A professional README isn't complete without a clear repository map. It helps other developers (and future you) instantly understand where everything lives before they even open a single file.
+
+Here is your finalized, comprehensive README.md that now includes the exact folder structure of your solution alongside the DevSecOps architecture we built.
+
+Copy this block, replace your current README.md, and push it to GitHub!
+
+Markdown
+# 🔒 SecureShare
+
+SecureShare is a highly secure, encrypted file-sharing system built with **.NET 9**. It features a fully automated DevSecOps CI/CD pipeline for seamless containerized deployment to AWS, complete with real-time enterprise observability.
+
+---
+
+## 📂 Project Structure
+
+```text
+SecureShare/
+├── SecureShare.API/            # Core .NET 9 Web API Application
+│   ├── Controllers/            # API Endpoints
+│   ├── Program.cs              # App entry point & Prometheus middleware
+│   └── SecureShare.API.csproj  # API Project file
+├── SecureShare.Core/           # Class Library (Business Logic & Models)
+│   └── SecureShare.Core.csproj # Core Project file
+├── terraform/                  # Infrastructure as Code (IaC)
+│   └── main.tf                 # AWS EC2 & Security Group provisioning
+├── .gitignore                  # Git rules for .NET, Terraform, & binaries
+├── docker-compose.yml          # Multi-container orchestration (API + Monitoring)
+├── Dockerfile                  # Multi-stage Docker build for the .NET API
+├── Jenkinsfile                 # Declarative CI/CD Pipeline configuration
+├── prometheus.yml              # Prometheus scraping configuration
+└── README.md                   # Project documentation
+🚀 Tech Stack & Architecture
+Backend: C# / .NET 9 Web API
+
+Database: SQL Server Express
+
+Containerization: Docker & Docker Compose
+
+Infrastructure as Code (IaC): Terraform
+
+Cloud Provider: Amazon Web Services (AWS EC2)
+
+CI/CD Pipeline: Jenkins (Automated via GitHub Webhooks)
+
+Observability: Prometheus & Grafana
+
+🏗️ Infrastructure & Deployment Pipeline
+This project utilizes a modern Continuous Integration and Continuous Deployment (CI/CD) architecture with an integrated monitoring stack.
+
+The CI/CD Flow
+Push: Code is pushed to the master branch on GitHub.
+
+Trigger: A GitHub Webhook instantly notifies the Jenkins server.
+
+Build (CI): Jenkins checks out the repository, restores .NET dependencies, and compiles the application.
+
+Containerize: Jenkins builds a new Docker Image containing the compiled .NET API.
+
+Registry: The image is securely pushed to Docker Hub (hari2haran2/secureshare-api:latest).
+
+Deploy (CD): Jenkins establishes a secure SSH connection to the live AWS EC2 instance, clones the latest infrastructure files, and runs docker compose up -d to spin up the API and the monitoring stack.
+
+Infrastructure (Terraform)
+The AWS infrastructure is completely automated using Terraform.
+
+main.tf: Provisions a t3.micro Ubuntu EC2 instance, configures a Security Group (opening ports 22, 3000, 8080, and 9090), and automatically installs Docker and Docker Compose upon boot.
+
+State Management: .gitignore strictly protects .terraform/ binaries and .tfstate files from being committed to version control.
+
+📊 Observability Stack
+The live application is actively monitored using a sidecar pattern via Docker Compose:
+
+Prometheus-Net: The .NET application exposes real-time runtime metrics via the /metrics endpoint.
+
+Prometheus: Scrapes and stores the time-series data from the API container.
+
+Grafana: Visualizes the metrics (CPU load, memory allocation, HTTP request duration) in custom dashboards.
+
+Live Ports:
+
+:8080 - SecureShare .NET API
+
+:9090 - Prometheus Server
+
+:3000 - Grafana Dashboards
+
+💻 Local Development Setup
+To run this application locally on your Windows machine:
+
+Prerequisites:
+
+.NET 9 SDK
+
+Docker Desktop
+
+1. Clone the repository
+
+Bash
+git clone [https://github.com/Hari-haran-22/SecureShare.git](https://github.com/Hari-haran-22/SecureShare.git)
+cd SecureShare
+2. Run the Full Stack (API + Monitoring)
+
+Bash
+docker compose up -d
+Alternatively, to run just the API for debugging:
+
+Bash
+cd SecureShare.API
+dotnet run
+☁️ Cloud Provisioning Guide
+If you are a repository administrator and need to spin up the cloud infrastructure from scratch:
+
+1. Configure AWS CLI
+Ensure your local terminal is authenticated with your AWS IAM User credentials.
+
+Bash
+aws configure
+2. Provision the Server
+Navigate to the terraform directory and deploy the infrastructure.
+
+Bash
+cd terraform
+terraform init
+terraform apply
+3. Teardown
+To prevent unwanted AWS Free Tier charges when not in use:
+
+Bash
+terraform destroy
+🛡️ Security Best Practices Implemented
+Least Privilege: Infrastructure provisioning utilizes a dedicated AWS IAM User rather than the Root account.
+
+SSH Key Management: Strict Windows file permissions strip inheritance from .pem files, and Jenkins manages deployment keys securely via its internal credential vault.
+
+Hidden Variables: No IP addresses, database passwords, or secret keys are hardcoded in the source code or Jenkinsfile.
+
+Git Hygiene: Local .exe binaries and Terraform state files are strictly ignored to prevent repository bloat and secret leakage.
