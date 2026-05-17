@@ -32,14 +32,38 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// --- AUTOMATIC DATABASE MIGRATION (The Missing Piece!) ---
-// This ensures the empty SQL container gets all your tables built when it starts.
+// --- BULLETPROOF DATABASE MIGRATION ---
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    dbContext.Database.Migrate(); 
+    
+    int maxRetries = 6;
+    for (int i = 0; i < maxRetries; i++)
+    {
+        try
+        {
+            Console.WriteLine($"[DevOps] Attempting to connect to SQL Server... (Attempt {i + 1}/{maxRetries})");
+            dbContext.Database.Migrate(); 
+            Console.WriteLine("[DevOps] Database migration successful! SQL Server is ready.");
+            break; // Success! Exit the loop.
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DevOps] SQL Server not ready yet: {ex.Message}");
+            if (i == maxRetries - 1) 
+            {
+                Console.WriteLine("[DevOps] Fatal error: Could not connect to SQL Server after 60 seconds.");
+                throw; // Crash the app if it fails after 1 minute
+            }
+            
+            Console.WriteLine("[DevOps] Waiting 10 seconds before retrying...");
+            System.Threading.Thread.Sleep(10000); // Pause the app for 10 seconds
+        }
+    }
 }
-// --
+// --------------------------------------
+
+// --- 3. ENABLE THE UI ---
 
 // --- 3. ENABLE THE UI ---
 if (app.Environment.IsDevelopment())
