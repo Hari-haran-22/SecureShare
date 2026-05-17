@@ -39,7 +39,7 @@ resource "aws_security_group" "secureshare_sg" {
 # 3. Create the EC2 Instance
 resource "aws_instance" "secureshare_server" {
   ami           = "ami-0c7217cdde317cfec" 
-  instance_type = "t3.micro"              
+  instance_type = "t3.small"              
   key_name      = "terraform-deploy-key"     
 
   vpc_security_group_ids = [aws_security_group.secureshare_sg.id]
