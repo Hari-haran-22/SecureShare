@@ -1229,38 +1229,40 @@
         }
       },
       {
-        "kind": "QueryVariable",
-        "spec": {
-          "name": "instances",
-          "current": {
-            "text": "",
-            "value": ""
-          },
-          "label": "instances",
-          "hide": "dontHide",
-          "refresh": "onDashboardLoad",
-          "skipUrlSync": false,
-          "query": {
-            "kind": "DataQuery",
-            "group": "prometheus",
-            "version": "v0",
-            "datasource": {
-              "name": "${DS_PROMETHEUS}"
-            },
-            "spec": {
-              "__legacyStringValue": "label_values(http_requests_received_total, instance)"
-            }
-          },
-          "regex": "",
-          "regexApplyTo": "value",
-          "sort": "alphabeticalAsc",
-          "definition": "label_values(http_requests_received_total, instance)",
-          "options": [],
-          "multi": true,
-          "includeAll": true,
-          "allowCustomValue": true
-        }
+  "kind": "QueryVariable",
+  "spec": {
+    "name": "instances",
+    "current": {
+      "text": "All",
+      "value": [
+        "$__all"
+      ]
+    },
+    "label": "instances",
+    "hide": "dontHide",
+    "refresh": "onDashboardLoad",
+    "skipUrlSync": false,
+    "query": {
+      "kind": "DataQuery",
+      "group": "prometheus",
+      "version": "v0",
+      "datasource": {
+        "name": "Prometheus"
+      },
+      "spec": {
+        "__legacyStringValue": "label_values(up, instance)"
       }
+    },
+    "regex": "",
+    "regexApplyTo": "value",
+    "sort": "alphabeticalAsc",
+    "definition": "label_values(up, instance)",
+    "options": [],
+    "multi": true,
+    "includeAll": true,
+    "allowCustomValue": true
+  }
+}
     ]
   }
 }
