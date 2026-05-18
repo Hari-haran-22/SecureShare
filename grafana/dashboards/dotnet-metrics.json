@@ -60,7 +60,7 @@
                       "group": "prometheus",
                       "version": "v0",
                       "datasource": {
-                        "name": "bfmdnti9ilatcc"
+                        "name": "Prometheus"
                       },
                       "spec": {
                         "expr": "process_working_set_bytes /1024/1024",
@@ -186,7 +186,7 @@
                       "group": "prometheus",
                       "version": "v0",
                       "datasource": {
-                        "name": "bfmdnti9ilatcc"
+                        "name": "Prometheus"
                       },
                       "spec": {
                         "expr": "process_num_threads",
@@ -311,7 +311,7 @@
                       "group": "prometheus",
                       "version": "v0",
                       "datasource": {
-                        "name": "bfmdnti9ilatcc"
+                        "name": "Prometheus"
                       },
                       "spec": {
                         "expr": "process_open_handles",
@@ -437,7 +437,7 @@
                       "group": "prometheus",
                       "version": "v0",
                       "datasource": {
-                        "name": "bfmdnti9ilatcc"
+                        "name": "Prometheus"
                       },
                       "spec": {
                         "expr": "increase(dotnet_collection_count_total[$interval])",
@@ -561,7 +561,7 @@
                       "group": "prometheus",
                       "version": "v0",
                       "datasource": {
-                        "name": "bfmdnti9ilatcc"
+                        "name": "Prometheus"
                       },
                       "spec": {
                         "editorMode": "code",
@@ -658,7 +658,7 @@
                       "group": "prometheus",
                       "version": "v0",
                       "datasource": {
-                        "name": "bfmdnti9ilatcc"
+                        "name": "Prometheus"
                       },
                       "spec": {
                         "expr": "sum(increase(http_request_duration_seconds_bucket[$interval])) by (le)",
@@ -779,7 +779,7 @@
                       "group": "prometheus",
                       "version": "v0",
                       "datasource": {
-                        "name": "bfmdnti9ilatcc"
+                        "name": "Prometheus"
                       },
                       "spec": {
                         "expr": "http_requests_in_progress",
@@ -904,7 +904,7 @@
                       "group": "prometheus",
                       "version": "v0",
                       "datasource": {
-                        "name": "bfmdnti9ilatcc"
+                        "name": "Prometheus"
                       },
                       "spec": {
                         "expr": "dotnet_total_memory_bytes /1024/1024",
