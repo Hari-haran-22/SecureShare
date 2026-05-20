@@ -7,23 +7,32 @@ provider "aws" {
 resource "aws_security_group" "secureshare_sg" {
   name        = "secureshare_web_traffic"
   description = "Allow port 8080 and SSH"
-
+  #docker ports
   ingress {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"] 
   }
-
+  #SSH access
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"] 
   }
+  # Grafana UI Access
   ingress{
     from_port   = 3000
     to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  # Prometheus UI Access
+  ingress {
+    description = "Allow Prometheus UI traffic"
+    from_port   = 9090
+    to_port     = 9090
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
