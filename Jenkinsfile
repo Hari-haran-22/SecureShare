@@ -10,7 +10,7 @@ pipeline {
         IMAGE_NAME = 'hari2haran2/secureshare-api' 
         DOCKER_CRED_ID = 'docker-hub-id'
         AWS_CRED_ID = 'aws-ssh-key-id'
-        AWS_IP = '34.231.229.168'
+        AWS_IP = '98.93.19.215'
         DOCKER_HOST = 'tcp://127.0.0.1:2375'
     }
 
