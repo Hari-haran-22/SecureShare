@@ -1,119 +1,131 @@
-# SecureShare
+# 🛡️ SecureShare
 
-SecureShare is a high-performance, encrypted file-sharing platform designed with a secure .NET architecture and a modern, automated DevOps lifecycle. The project transitions seamlessly from code commitment to multi-container cloud environments using GitOps configurations, Automated CI/CD pipelines, Infrastructure as Code (IaC), and comprehensive full-stack monitoring.
+[![.NET Core](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?logo=docker)](https://www.docker.com/)
+[![Terraform](https://img.shields.io/badge/Terraform-AWS-7B42BC?logo=terraform)](https://www.terraform.io/)
+[![Jenkins](https://img.shields.io/badge/Jenkins-CI%2FCD-D24939?logo=jenkins)](https://www.jenkins.io/)
+[![Grafana](https://img.shields.io/badge/Grafana-Monitoring-F46800?logo=grafana)](https://grafana.com/)
 
-## 🚀 Key Features
-
-- **Secure & Encrypted Core:** Robust backend cryptography utilizing a multi-project clean architecture split (`SecureShare.API` and `SecureShare.Core`).
-- **Infrastructure as Code (IaC):** Automated AWS environment provisioning using custom **Terraform** scripts.
-- **Continuous Integration & Deployment (CI/CD):** A comprehensive declarative **Jenkins** pipeline automating Docker builds, multi-platform image registry pushing, safe remote host file management, and zero-downtime SSH target deployment.
-- **Dashboards as Code (Observability):** Native integration with **Prometheus** for metrics collection and dynamic **Grafana** GitOps provisioning—completely patched for real-time container instance tracking and dynamic datasource rendering.
+SecureShare is a high-performance, encrypted file-sharing platform engineered with a secure .NET Clean Architecture and a modern, automated DevOps lifecycle. This project demonstrates a complete end-to-end cloud-native application, from code commit to a fully monitored multi-container deployment on AWS.
 
 ---
 
-## 📂 Project Structure
+## ✨ Key Features
 
-Below is the complete architectural layout of the SecureShare repository:
+*   **Secure & Encrypted Core:** Robust backend cryptography ensures files are secure at rest. Built using a multi-project Clean Architecture split (`SecureShare.API` and `SecureShare.Core`).
+*   **Infrastructure as Code (IaC):** Automated cloud environment provisioning on AWS utilizing **Terraform**.
+*   **Continuous Integration & Deployment (CI/CD):** Declarative **Jenkins** pipelines automate Docker image builds, container registry pushes, and zero-downtime deployments via SSH.
+*   **Observability & Dashboards as Code:** Native integration with **Prometheus** for metrics collection and dynamic **Grafana** provisioning for real-time telemetry and process monitoring.
+*   **Containerized Architecture:** Fully dockerized ecosystem allowing seamless transitions from local development to production servers.
+
+---
+
+## 🛠️ Technology Stack
+
+| Category | Technology |
+| :--- | :--- |
+| **Backend Framework** | C# / .NET (Core Architecture) |
+| **Database Engine** | Microsoft SQL Server Express |
+| **Containerization** | Docker Engine & Docker Compose |
+| **Infrastructure Provisioning** | Terraform (AWS Provider) |
+| **CI/CD Automation** | Jenkins Automation Server |
+| **Telemetry / Time-Series DB** | Prometheus |
+| **Visualization** | Grafana |
+
+---
+
+## 📂 Complete Project Structure
 
 ```text
 SecureShare/
+├── SecureShare.API/                  # Presentation Layer (.NET Web API)
+│   ├── Controllers/                  # API endpoints (Upload, Share, Download)
+│   ├── appsettings.json              # App configuration & DB connection strings
+│   └── Program.cs                    # App entry point & Dependency Injection
 │
-├── grafana/                          # Observability Configurations (Dashboards as Code)
-│   ├── dashboards/
-│   │   └── dotnet-metrics.json       # Pre-patched .NET Prometheus telemetry dashboard
-│   └── provisioning/
-│       ├── dashboards/
-│       │   └── dashboards.yml        # Automated Grafana dashboard provider specification
-│       └── datasources/
-│           └── datasources.yml       # Automated local Prometheus data target registration
+├── SecureShare.Core/                 # Domain & Business Logic Layer
+│   ├── Models/                       # Domain entities and contracts
+│   └── Services/                     # Cryptography and file handling rules
 │
-├── prometheus/                       # Time-Series Database Infrastructure
-│   └── prometheus.yml                # Scrape configuration targeted at secureshare-api metrics
+├── grafana/                          # Dashboards as Code
+│   ├── dashboards/                   # Pre-patched .NET telemetry dashboards
+│   └── provisioning/                 # Automated Grafana provider & datasource configs
 │
-├── SecureShare.API/                  # Presentation / Endpoint Layer (.NET Core)
-│   ├── Controllers/                  # API routing endpoints (File Uploads, Shares, Download management)
-│   ├── Properties/
-│   ├── appsettings.json              # Configuration file (DB strings, system boundaries)
-│   ├── Program.cs                    # Application entry point & service dependency injections
-│   └── SecureShare.API.csproj
+├── prometheus/                       # Monitoring Infrastructure
+│   └── prometheus.yml                # Scrape configuration for the API metrics
 │
-├── SecureShare.Core/                 # Domain / Business Logic Layer
-│   ├── Models/                       # Core system entities and structural contracts
-│   ├── Services/                     # Cryptographic processors and file handling business rules
-│   └── SecureShare.Core.csproj
+├── teraform/                         # Infrastructure as Code (AWS)
+│   └── main.tf                       # Terraform configs for AWS EC2/VPC deployment
 │
-├── .dockerignore                     # Optimizes Docker builds by ignoring local binaries and assets
-├── .gitignore                        # Prevents build binaries and IDE caches from tracking to GitHub
-├── docker-compose.yml                # Multi-container orchestration (API, Database, Prometheus, Grafana)
-├── Dockerfile                        # Multi-stage, production-optimized container manifest
-├── index.html                        # Front-end / Landing test environment portal
-├── Jenkinsfile                       # Production-grade declarative pipeline code for automated deployment
-├── main.tf                           # Terraform configuration mapping infrastructure to AWS (EC2/VPC)
-└── README.md                         # Detailed project system specification manual
-🛠️ Tech Stack & Infrastructure Components
-Backend Architecture: C# / .NET 10.0 runtime Core Environment
+├── Dockerfile                        # Multi-stage production container manifest
+├── docker-compose.yml                # Multi-container orchestration (API, DB, Monitoring)
+├── Jenkinsfile                       # CI/CD Declarative Pipeline
+├── index.html                        # Front-end landing / test portal
+└── SecureShare.slnx                  # .NET Solution file
+```
 
-Database Engine: Microsoft SQL Server Express Core Instance
+---
 
-Containerization Engine: Docker Engine & Docker Compose Orchestration
+## 🚀 Getting Started (Local Development)
 
-Infrastructure Provisioning: Terraform (AWS Provider)
+To run the entire multi-tier system locally, you only need Git and Docker installed.
 
-CI/CD Automation Runner: Jenkins Automation Server
-
-Telemetry & Monitoring: Prometheus (Scraper) & Grafana (Visualization Suite)
-
-🔧 Installation & Deployment Guide
-1. Local Orchestration Setup
-To clone, construct, and execute the entire multi-tier system directly on a local development host:
-
-Bash
-# Clone the repository
-git clone [https://github.com/Hari-haran-22/SecureShare.git](https://github.com/Hari-haran-22/SecureShare.git)
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Hari-haran-22/SecureShare.git
 cd SecureShare
+```
 
-# Spin up all infrastructure containers simultaneously
-docker compose up -d --build
-Once initialized, the platform endpoints expose directly through:
+### 2. Spin Up Infrastructure
+Launch the API, SQL Database, Prometheus, and Grafana simultaneously using Docker Compose:
+```bash
+docker-compose up -d --build
+```
 
-SecureShare API Portal: http://localhost:8080/swagger
+### 3. Access the Services
+Once initialized, the platform services are exposed locally at:
+*   **Swagger API Portal:** [http://localhost:8080/swagger](http://localhost:8080/swagger)
+*   **Grafana Telemetry Dashboard:** [http://localhost:3000](http://localhost:3000) (Check the automated `.NET Metrics` dashboard)
+*   **Web Portal UI:** Open `index.html` in your browser.
 
-Grafana Live Telemetry Dashboard: http://localhost:3000
+---
 
-2. Infrastructure as Code (AWS Cloud Delivery)
-To spin up a pristine production VM target dynamically inside AWS:
+## ☁️ Infrastructure as Code (AWS Delivery)
 
-Bash
-# Initialize providers and construct target architecture
+To provision a pristine production environment in AWS, navigate to the terraform directory:
+
+```bash
+cd teraform
 terraform init
 terraform plan
 terraform apply -auto-approve
-3. Continuous Integration Flow (Jenkins Pipeline)
-The delivery pipeline defined inside the Jenkinsfile runs automated routines through three foundational stages:
+```
+*Note: Ensure your AWS CLI is configured with the appropriate IAM credentials before applying.*
 
-Checkout SCM: Code pull from GitHub verifying integrity and fetching latest provisioning schemas.
+---
 
-Build Image: Compiles raw C# binaries through optimized multi-stage Docker environments and tags images to a registries index.
+## 🔄 CI/CD Pipeline Flow (Jenkins)
 
-Push to Registry: Authenticates with secure registry contexts (withCredentials) to deploy artifacts to Docker Hub storage handles.
+The delivery pipeline defined in the `Jenkinsfile` executes the following stages automatically on commit:
 
-Deploy to AWS: Automatically logs into target instance boundaries via secure SSH keys, forces clean tree states via git reset --hard HEAD, updates configs, hooks live telemetry databases, and brings the stack back online seamlessly via Docker Compose.
+1.  **Checkout SCM:** Pulls the latest codebase from GitHub.
+2.  **Build Image:** Compiles C# binaries via a multi-stage Dockerfile and builds the production image.
+3.  **Push to Registry:** Authenticates via Jenkins credentials and pushes the artifact to Docker Hub.
+4.  **Deploy to AWS:** Connects to the provisioned AWS EC2 instance via SSH, pulls the latest images, and restarts the environment using `docker-compose` for a seamless update.
 
-📊 Monitoring Dashboard Notes
-The dashboard maps metrics using custom Prometheus PromQL queries. Key elements include:
+---
 
-Instance Auto-Discovery: The variable system utilizes label_values(up, instance) ensuring dynamic cloud target visualization across environment teardowns without hardcoding.
+## 📊 Observability & Monitoring
 
-Stability Metrics: Tracks real-time GC Collection metrics, thread lifecycles, and process allocations to ensure the server behaves predictably under load.
+The system utilizes PromQL queries to map deep runtime metrics:
+*   **Instance Auto-Discovery:** Dynamic tracking of container targets across teardowns without hardcoded IPs.
+*   **Performance Metrics:** Real-time monitoring of Garbage Collection (GC), thread pools, and CPU/Memory allocations to ensure the server behaves predictably under heavy file I/O load.
 
-***
+---
 
-### Steps to Save this to your Repository:
-1. Open your local `SecureShare` directory in VS Code.
-2. Open your `README.md` file.
-3. Replace its entire contents with the markdown block above.
-4. Stage, commit, and push it up using your Git terminal:
-   ```bash
-   git add README.md
-   git commit -m "Docs: Updated README with complete project structure and DevOps layout"
-   git push
+## 🧪 QA & Testing Strategy
+
+This repository serves as an excellent foundation for advanced Quality Assurance practices:
+*   **API Automation:** Validate file upload integrity, encryption success, and access control via Postman or REST Assured.
+*   **Load Testing:** Simulate concurrent high-volume file transfers using JMeter/k6 while monitoring hardware limits via Grafana.
+*   **Security Audits:** Test for Insecure Direct Object References (IDOR) and validate Terraform configs using IaC security scanners.
