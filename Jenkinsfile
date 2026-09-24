@@ -1,6 +1,7 @@
 pipeline {
     agent any
     options {
+        skipDefaultCheckout(true)
         disableConcurrentBuilds()
         timestamps()
         timeout(time: 30, unit: 'MINUTES')
@@ -15,6 +16,15 @@ pipeline {
         string(name: 'SSH_CREDENTIAL_ID', defaultValue: 'aws-ssh-key-id', description: 'Jenkins SSH key credential for the selected AWS server')
     }
     stages {
+        stage('Checkout') {
+            steps {
+                deleteDir()
+                bat 'git clone --depth 1 --branch master https://github.com/Hari-haran-22/SecureShare.git .'
+                script {
+                    env.GIT_COMMIT = bat(script: '@git rev-parse HEAD', returnStdout: true).trim()
+                }
+            }
+        }
         stage('Validate inputs') {
             steps {
                 script {
