@@ -10,5 +10,7 @@ test -f secrets/protection.pfx
 git diff --quiet
 git diff --cached --quiet
 git fetch origin "$commit"
+# Remove stale checkout files while preserving ignored runtime secrets.
+git clean -fd
 git checkout --detach "$commit"
 bash scripts/deploy.sh "$image"
