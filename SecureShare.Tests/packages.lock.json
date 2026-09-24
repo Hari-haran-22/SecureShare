@@ -775,7 +775,9 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.3, )",
+          "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.3, )",
           "Microsoft.OpenApi": "[2.7.5, )",
+          "SQLitePCLRaw.bundle_e_sqlite3": "[2.1.12, )",
           "SecureShare.Core": "[1.0.0, )",
           "Swashbuckle.AspNetCore": "[10.1.4, )",
           "prometheus-net.AspNetCore": "[8.2.1, )"

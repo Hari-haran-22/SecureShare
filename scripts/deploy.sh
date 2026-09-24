@@ -13,9 +13,9 @@ if [[ -n "$container" ]]; then
 fi
 export API_IMAGE="$image"
 "${compose[@]}" pull secureshare-api
-# Ensure first-time deployments have healthy migration dependencies. On later
-# deployments this is a no-op for the already running services.
-"${compose[@]}" up -d --no-build --wait --wait-timeout 300 db clamav
+# Ensure first-time deployments have a healthy scanner before migration. The
+# production database is embedded so it fits on the 1 GB free-tier host.
+"${compose[@]}" up -d --no-build --wait --wait-timeout 300 clamav
 # Keep a verified pre-migration backup. This uses a brief maintenance window.
 if [[ -n "$container" ]]; then bash scripts/backup.sh --production; fi
 "${compose[@]}" stop secureshare-api

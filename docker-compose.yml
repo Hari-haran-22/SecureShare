@@ -6,7 +6,8 @@ services:
       - uploads:/data/uploads
       - protection_keys:/data/keys
       - database_backups:/data/backups
-    command: ["sh", "-c", "chown 1654:1654 /data/uploads /data/keys; chmod 700 /data/uploads /data/keys; chown 10001:0 /data/backups; chmod 770 /data/backups"]
+      - sqlite_data:/data/sqlite
+    command: ["sh", "-c", "chown 1654:1654 /data/uploads /data/keys /data/sqlite; chmod 700 /data/uploads /data/keys /data/sqlite; chown 10001:0 /data/backups; chmod 770 /data/backups"]
   db:
     image: mcr.microsoft.com/mssql/server:2022-CU22-ubuntu-22.04
     environment:
@@ -110,16 +111,18 @@ services:
       - uploads:/data/uploads:ro
       - protection_keys:/data/keys:ro
       - database_backups:/data/database:ro
+      - sqlite_data:/data/sqlite:ro
       - ./secrets:/data/secrets:ro
       - ./backups:/backups
     entrypoint: ["/bin/sh", "-c"]
-    command: ["set -e; umask 077; tar -czf /tmp/snapshot.tar.gz -C /data uploads keys database secrets/protection.pfx secrets/protection-password; gpg --batch --symmetric --cipher-algo AES256 --pinentry-mode loopback --passphrase-file /data/secrets/backup-password --output /backups/secureshare-$$(date -u +%Y%m%dT%H%M%SZ).tar.gz.gpg /tmp/snapshot.tar.gz"]
+    command: ["set -e; umask 077; tar -czf /tmp/snapshot.tar.gz -C /data uploads keys database sqlite secrets/protection.pfx secrets/protection-password; gpg --batch --symmetric --cipher-algo AES256 --pinentry-mode loopback --passphrase-file /data/secrets/backup-password --output /backups/secureshare-$$(date -u +%Y%m%dT%H%M%SZ).tar.gz.gpg /tmp/snapshot.tar.gz"]
 
 volumes:
   sql_data:
   uploads:
   protection_keys:
   database_backups:
+  sqlite_data:
   clamav_data:
   prometheus_data:
   grafana_data:

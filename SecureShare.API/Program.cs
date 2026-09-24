@@ -32,7 +32,16 @@ builder.Logging.AddJsonConsole();
 var local = builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing");
 var connection = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection.");
-builder.Services.AddDbContext<ApplicationDbContext>(o => o.UseSqlServer(connection, sql => sql.EnableRetryOnFailure()));
+var databaseProvider = builder.Configuration["Database:Provider"] ?? "SqlServer";
+builder.Services.AddDbContext<ApplicationDbContext>(o =>
+{
+    if (databaseProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+        o.UseSqlite(connection);
+    else if (databaseProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+        o.UseSqlServer(connection, sql => sql.EnableRetryOnFailure());
+    else
+        throw new InvalidOperationException("Database:Provider must be SqlServer or Sqlite.");
+});
 builder.Services.AddOptions<StorageOptions>().BindConfiguration("Storage")
     .Validate(o => o.MaxFileBytes > 0 && o.MaxFileBytes <= 1024L * 1024 * 1024 &&
         o.OwnerQuotaBytes >= o.MaxFileBytes && o.TotalQuotaBytes >= o.OwnerQuotaBytes &&
@@ -124,11 +133,26 @@ builder.Services.AddRateLimiter(o => {
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 var app = builder.Build();
+if (args.Contains("--check-database"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.OpenConnectionAsync();
+    await using var command = db.Database.GetDbConnection().CreateCommand();
+    command.CommandText = db.Database.IsSqlite() ? "PRAGMA integrity_check;" : "SELECT 1";
+    var result = await command.ExecuteScalarAsync();
+    if (db.Database.IsSqlite() && !string.Equals(result?.ToString(), "ok", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("SQLite integrity check failed.");
+    return;
+}
 if (builder.Configuration.GetValue("Database:MigrateOnStartup", local) || args.Contains("--migrate-only"))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await db.Database.MigrateAsync();
+    if (db.Database.IsSqlite())
+        await db.Database.EnsureCreatedAsync();
+    else
+        await db.Database.MigrateAsync();
     await scope.ServiceProvider.GetRequiredService<LegacyFileUpgrade>().RunAsync();
 }
 if (args.Contains("--migrate-only")) return;

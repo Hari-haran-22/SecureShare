@@ -1,8 +1,13 @@
 services:
+  db:
+    profiles: [sqlserver]
+
   secureshare-api:
     ports: !reset []
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      Database__Provider: Sqlite
+      ConnectionStrings__DefaultConnection: "Data Source=/app/Data/secureshare.db;Default Timeout=30"
       Database__MigrateOnStartup: "false"
       DataProtection__CertificatePath: /run/secrets/protection.pfx
       DataProtection__CertificatePasswordFile: /run/secrets/protection-password
@@ -11,6 +16,12 @@ services:
     volumes:
       - ./secrets/protection.pfx:/run/secrets/protection.pfx:ro
       - ./secrets/protection-password:/run/secrets/protection-password:ro
+      - sqlite_data:/app/Data
+    depends_on: !override
+      volume-init:
+        condition: service_completed_successfully
+      clamav:
+        condition: service_healthy
     networks: [default, edge]
 
   caddy:
@@ -37,3 +48,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  sqlite_data:
