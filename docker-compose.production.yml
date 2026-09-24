@@ -23,7 +23,10 @@ services:
     depends_on: !override
       volume-init:
         condition: service_completed_successfully
-    networks: [default, edge]
+    networks:
+      default: {}
+      edge:
+        ipv4_address: 172.29.50.3
 
   clamav:
     profiles: [services]
