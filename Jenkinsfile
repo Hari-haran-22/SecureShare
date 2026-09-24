@@ -46,7 +46,7 @@ pipeline {
         }
         stage('Security and infrastructure checks') {
             steps {
-                bat 'docker run --rm -v "%WORKSPACE%:/src" -w /src aquasec/trivy:0.67.2 fs --scanners vuln,secret,misconfig --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .git,SecureShare.API/SecureUploads,secrets,backups .'
+                bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v "%WORKSPACE%:/src" -w /src aquasec/trivy:0.67.2 fs --timeout 15m --scanners vuln,secret,misconfig --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .git,SecureShare.API/SecureUploads,secrets,backups .'
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform fmt -check'
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform init -backend=false'
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform validate'
@@ -55,7 +55,7 @@ pipeline {
         stage('Build and scan image') {
             steps {
                 bat 'docker build --pull -t "%IMAGE_NAME%:%GIT_COMMIT%" .'
-                bat 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.67.2 image --exit-code 1 --severity HIGH,CRITICAL "%IMAGE_NAME%:%GIT_COMMIT%"'
+                bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.67.2 image --timeout 15m --exit-code 1 --severity HIGH,CRITICAL "%IMAGE_NAME%:%GIT_COMMIT%"'
             }
         }
         stage('Push image') {
