@@ -234,7 +234,9 @@ resource "aws_instance" "app_server" {
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     systemctl enable --now docker
+    usermod -aG docker ubuntu
     install -d -m 0700 /opt/secureshare
+    chown ubuntu:ubuntu /opt/secureshare
   EOF
   tags = {
     Name    = "SecureShare-App"
@@ -276,7 +278,9 @@ resource "aws_instance" "services_server" {
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     systemctl enable --now docker
+    usermod -aG docker ubuntu
     install -d -m 0700 /opt/secureshare
+    chown ubuntu:ubuntu /opt/secureshare
   EOF
   tags = {
     Name    = "SecureShare-Services"
