@@ -381,6 +381,7 @@ crash.*.log
 .env
 secrets/
 backups/
+deploy/prometheus-runtime.yml
 **/DataProtectionKeys/
 SecureShare.API/SecureUploads/
 *.tfvars

@@ -35,6 +35,9 @@ variable "expected_account_id" {
 }
 
 data "aws_caller_identity" "current" {}
+data "aws_vpc" "default" {
+  default = true
+}
 
 output "aws_account_id" {
   value = data.aws_caller_identity.current.account_id
@@ -106,6 +109,13 @@ resource "aws_security_group" "secureshare_sg" {
       cidr_blocks = var.ssh_cidrs
     }
   }
+  ingress {
+    description = "API metrics from the private services node"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
+  }
   # Public HTTP is required for Ubuntu package repositories and certificate redirects.
   #trivy:ignore:AVD-AWS-0104
   egress {
@@ -121,6 +131,58 @@ resource "aws_security_group" "secureshare_sg" {
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    description = "Malware scanning on the private services node"
+    from_port   = 3310
+    to_port     = 3310
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
+  }
+}
+
+resource "aws_security_group" "services_sg" {
+  name_prefix = "secureshare-services-"
+  description = "Private scanner and monitoring services"
+
+  dynamic "ingress" {
+    for_each = length(var.ssh_cidrs) > 0 ? [1] : []
+    content {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = var.ssh_cidrs
+    }
+  }
+  ingress {
+    description = "ClamAV requests from the application node"
+    from_port   = 3310
+    to_port     = 3310
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
+  }
+  # Public HTTPS is needed for package updates, container pulls, and SSM.
+  #trivy:ignore:AVD-AWS-0104
+  egress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  # Ubuntu package repositories can redirect to public HTTP mirrors.
+  #trivy:ignore:AVD-AWS-0104
+  egress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    description = "Prometheus scrapes the application over the VPC"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
   }
 }
 
@@ -144,7 +206,7 @@ resource "aws_iam_instance_profile" "instance" {
   role        = aws_iam_role.instance.name
 }
 
-resource "aws_instance" "secureshare_server" {
+resource "aws_instance" "app_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   key_name               = var.ssh_key_name
@@ -175,12 +237,65 @@ resource "aws_instance" "secureshare_server" {
     install -d -m 0700 /opt/secureshare
   EOF
   tags = {
-    Name = "SecureShare-Production"
+    Name    = "SecureShare-App"
+    Project = "SecureShare"
+    Role    = "app"
+  }
+}
+
+moved {
+  from = aws_instance.secureshare_server
+  to   = aws_instance.app_server
+}
+
+resource "aws_instance" "services_server" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.instance_type
+  key_name               = var.ssh_key_name
+  iam_instance_profile   = aws_iam_instance_profile.instance.name
+  vpc_security_group_ids = [aws_security_group.services_sg.id]
+
+  metadata_options {
+    http_tokens = "required"
+  }
+  root_block_device {
+    volume_size           = 16
+    volume_type           = "gp3"
+    encrypted             = true
+    delete_on_termination = true
+  }
+  user_data = <<-EOF
+    #!/bin/bash
+    set -euo pipefail
+    apt-get update
+    apt-get install -y ca-certificates curl git
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    systemctl enable --now docker
+    install -d -m 0700 /opt/secureshare
+  EOF
+  tags = {
+    Name    = "SecureShare-Services"
+    Project = "SecureShare"
+    Role    = "services"
   }
 }
 output "server_public_ip" {
-  value = aws_instance.secureshare_server.public_ip
+  value = aws_instance.app_server.public_ip
 }
 output "instance_id" {
-  value = aws_instance.secureshare_server.id
+  value = aws_instance.app_server.id
+}
+output "services_public_ip" {
+  value = aws_instance.services_server.public_ip
+}
+output "services_private_ip" {
+  value = aws_instance.services_server.private_ip
+}
+output "services_instance_id" {
+  value = aws_instance.services_server.id
 }

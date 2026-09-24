@@ -13,6 +13,9 @@ pipeline {
     parameters {
         string(name: 'IMAGE_NAME', defaultValue: 'hari2haran2/secureshare-api', description: 'Docker Hub image repository')
         string(name: 'DEPLOY_HOST', defaultValue: '13.60.23.3', description: 'Approved AWS deployment host')
+        string(name: 'APP_PRIVATE_IP', defaultValue: '', description: 'Application node private IPv4 address')
+        string(name: 'SERVICES_HOST', defaultValue: '', description: 'Scanner/monitoring node public IPv4 address')
+        string(name: 'SCANNER_PRIVATE_IP', defaultValue: '', description: 'Scanner node private IPv4 address')
         string(name: 'SSH_CREDENTIAL_ID', defaultValue: 'aws-ssh-key-id', description: 'Jenkins SSH key credential for the selected AWS server')
     }
     stages {
@@ -30,6 +33,9 @@ pipeline {
                 script {
                     if (!(params.IMAGE_NAME ==~ /[a-z0-9][a-z0-9._\/-]+/) ||
                         !(params.DEPLOY_HOST ==~ /[a-zA-Z0-9.-]*/) ||
+                        !(params.APP_PRIVATE_IP ==~ /[0-9]{1,3}(\.[0-9]{1,3}){3}/) ||
+                        !(params.SERVICES_HOST ==~ /[a-zA-Z0-9.-]*/) ||
+                        !(params.SCANNER_PRIVATE_IP ==~ /[0-9]{1,3}(\.[0-9]{1,3}){3}/) ||
                         !(params.SSH_CREDENTIAL_ID ==~ /[a-zA-Z0-9_.-]+/)) {
                         error('Invalid image or deployment address')
                     }
@@ -71,7 +77,7 @@ pipeline {
             }
         }
         stage('Deploy and verify') {
-            when { expression { params.DEPLOY_HOST.trim() != '' } }
+            when { expression { params.DEPLOY_HOST.trim() != '' && params.SERVICES_HOST.trim() != '' } }
             steps {
                 withCredentials([
                     sshUserPrivateKey(credentialsId: params.SSH_CREDENTIAL_ID,
@@ -82,8 +88,11 @@ pipeline {
                             @echo off
                             for /f "tokens=*" %%i in ('whoami') do icacls "%SSH_KEY%" /inheritance:r /grant "%%i:R"
                             ssh -i "%SSH_KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ^
+                                -o UserKnownHostsFile="%WORKSPACE%\\deploy\\known_hosts" "%SSH_USERNAME%@%SERVICES_HOST%" ^
+                                bash -s -- "%GIT_COMMIT%" "%IMAGE_NAME%:%GIT_COMMIT%" services "%APP_PRIVATE_IP%" < scripts\\remote-deploy.sh
+                            ssh -i "%SSH_KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ^
                                 -o UserKnownHostsFile="%WORKSPACE%\\deploy\\known_hosts" "%SSH_USERNAME%@%DEPLOY_HOST%" ^
-                                bash -s -- "%GIT_COMMIT%" "%IMAGE_NAME%:%GIT_COMMIT%" < scripts\\remote-deploy.sh
+                                bash -s -- "%GIT_COMMIT%" "%IMAGE_NAME%:%GIT_COMMIT%" app "%SCANNER_PRIVATE_IP%" < scripts\\remote-deploy.sh
                         '''
                 }
             }

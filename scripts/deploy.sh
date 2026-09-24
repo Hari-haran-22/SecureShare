@@ -2,7 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 image="$1"
+scanner_host="${2:-clamav}"
 [[ "$image" =~ ^[a-z0-9][a-z0-9./:_-]+$ ]] || { echo 'Invalid image'; exit 2; }
+[[ "$scanner_host" =~ ^[a-zA-Z0-9.-]+$ ]] || { echo 'Invalid scanner host'; exit 2; }
 compose=(docker compose -f docker-compose.yml -f docker-compose.production.yml)
 container=$("${compose[@]}" ps -q secureshare-api)
 previous=""
@@ -12,10 +14,15 @@ if [[ -n "$container" ]]; then
     previous_format=$(docker inspect --format '{{ index .Config.Labels "org.secureshare.encryption-version" }}' "$container")
 fi
 export API_IMAGE="$image"
+export SCANNER_HOST="$scanner_host"
 "${compose[@]}" pull secureshare-api
-# Ensure first-time deployments have a healthy scanner before migration. The
-# production database is embedded so it fits on the 1 GB free-tier host.
-"${compose[@]}" up -d --no-build --wait --wait-timeout 900 clamav
+# The scanner can run on a second small instance. Wait for its private endpoint
+# before changing the application so uploads always fail closed.
+for attempt in {1..120}; do
+    if timeout 2 bash -c "</dev/tcp/$scanner_host/3310" 2>/dev/null; then break; fi
+    if [[ "$attempt" == 120 ]]; then echo 'Scanner did not become reachable'; exit 1; fi
+    sleep 5
+done
 # Keep a verified pre-migration backup. This uses a brief maintenance window.
 if [[ -n "$container" ]]; then bash scripts/backup.sh --production; fi
 "${compose[@]}" stop secureshare-api
@@ -29,7 +36,7 @@ rollback() {
 }
 trap 'rollback' ERR
 "${compose[@]}" run --rm --no-deps secureshare-api --migrate-only
-"${compose[@]}" up -d --no-build --wait --wait-timeout 900
+"${compose[@]}" up -d --no-build --wait --wait-timeout 300 secureshare-api caddy
 trap - ERR
 # Persist the successful immutable image so a later reboot or compose run uses it.
 if grep -q '^API_IMAGE=' .env; then

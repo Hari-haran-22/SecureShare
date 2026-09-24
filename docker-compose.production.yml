@@ -3,12 +3,15 @@ services:
     profiles: [sqlserver]
 
   secureshare-api:
-    ports: !reset []
+    # Port 8080 is reachable only inside the VPC security group. Caddy still
+    # serves all public traffic over HTTPS.
+    ports: !override ["0.0.0.0:8080:8080"]
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Database__Provider: Sqlite
       ConnectionStrings__DefaultConnection: "Data Source=/app/Data/secureshare.db;Default Timeout=30"
       Database__MigrateOnStartup: "false"
+      Scanner__Host: ${SCANNER_HOST:-clamav}
       DataProtection__CertificatePath: /run/secrets/protection.pfx
       DataProtection__CertificatePasswordFile: /run/secrets/protection-password
       ReverseProxy__KnownProxies__0: 172.29.50.2
@@ -20,9 +23,24 @@ services:
     depends_on: !override
       volume-init:
         condition: service_completed_successfully
-      clamav:
-        condition: service_healthy
     networks: [default, edge]
+
+  clamav:
+    profiles: [services]
+    ports: ["0.0.0.0:3310:3310"]
+
+  prometheus:
+    profiles: [services]
+    volumes: !override
+      - ./deploy/prometheus-runtime.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+
+  alertmanager:
+    profiles: [services]
+
+  grafana:
+    profiles: [services]
 
   caddy:
     image: caddy:2.11.4-alpine
