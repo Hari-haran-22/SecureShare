@@ -106,10 +106,20 @@ resource "aws_security_group" "secureshare_sg" {
       cidr_blocks = var.ssh_cidrs
     }
   }
+  # Public HTTP is required for Ubuntu package repositories and certificate redirects.
+  #trivy:ignore:AVD-AWS-0104
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  # Public HTTPS is required for package updates, container pulls, SSM, and ACME.
+  #trivy:ignore:AVD-AWS-0104
+  egress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
