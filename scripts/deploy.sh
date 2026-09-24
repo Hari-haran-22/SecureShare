@@ -15,7 +15,7 @@ export API_IMAGE="$image"
 "${compose[@]}" pull secureshare-api
 # Ensure first-time deployments have a healthy scanner before migration. The
 # production database is embedded so it fits on the 1 GB free-tier host.
-"${compose[@]}" up -d --no-build --wait --wait-timeout 300 clamav
+"${compose[@]}" up -d --no-build --wait --wait-timeout 900 clamav
 # Keep a verified pre-migration backup. This uses a brief maintenance window.
 if [[ -n "$container" ]]; then bash scripts/backup.sh --production; fi
 "${compose[@]}" stop secureshare-api
@@ -29,7 +29,7 @@ rollback() {
 }
 trap 'rollback' ERR
 "${compose[@]}" run --rm --no-deps secureshare-api --migrate-only
-"${compose[@]}" up -d --no-build --wait --wait-timeout 300
+"${compose[@]}" up -d --no-build --wait --wait-timeout 900
 trap - ERR
 # Persist the successful immutable image so a later reboot or compose run uses it.
 if grep -q '^API_IMAGE=' .env; then

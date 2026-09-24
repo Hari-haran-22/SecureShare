@@ -67,6 +67,12 @@ services:
     volumes:
       - clamav_data:/var/lib/clamav
       - ./deploy/clamd.conf:/etc/clamav/clamd.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "[ \"$$(echo PING | nc 127.0.0.1 3310)\" = PONG ]"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 10m
     restart: unless-stopped
 
   prometheus:
