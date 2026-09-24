@@ -19,6 +19,7 @@ scrape_configs:
     static_configs:
       - targets: ['$app_private_ip:8080']
 EOF
+chmod 0644 deploy/prometheus-runtime.yml
 
 "${compose[@]}" pull clamav prometheus alertmanager grafana
 "${compose[@]}" --profile services up -d --no-build --wait --wait-timeout 900 clamav

@@ -23,6 +23,9 @@ for attempt in {1..120}; do
     if [[ "$attempt" == 120 ]]; then echo 'Scanner did not become reachable'; exit 1; fi
     sleep 5
 done
+# Remove the heavyweight services from the application node after the remote
+# scanner is ready. Persistent application volumes are left untouched.
+"${compose[@]}" stop clamav prometheus alertmanager grafana || true
 # Keep a verified pre-migration backup. This uses a brief maintenance window.
 if [[ -n "$container" ]]; then bash scripts/backup.sh --production; fi
 "${compose[@]}" stop secureshare-api
