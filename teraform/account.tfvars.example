@@ -1,0 +1,9 @@
+# Copy to account.auto.tfvars, or use scripts/Use-AwsAccount.ps1 to verify and save the selection.
+# Replace these placeholders with the new account and your configured local profile.
+aws_profile         = "secureshare-new"
+expected_account_id = "REPLACE_WITH_12_DIGIT_ACCOUNT_ID"
+region              = "us-east-1"
+
+# Set these only if Jenkins needs SSH. Create the key pair in the new account.
+# ssh_key_name = "secureshare-deploy"
+# ssh_cidrs    = ["YOUR_JENKINS_PUBLIC_IP/32"]

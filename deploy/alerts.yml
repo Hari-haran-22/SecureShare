@@ -1,0 +1,31 @@
+groups:
+  - name: secureshare
+    rules:
+      - alert: SecureShareDown
+        expr: up{job="secureshare-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: SecureShare API cannot be scraped
+      - alert: SecureShareServerErrors
+        expr: sum(rate(http_requests_received_total{code=~"5.."}[5m])) / clamp_min(sum(rate(http_requests_received_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 5% of API requests are failing
+      - alert: SecureShareCleanupStalled
+        expr: time() - secureshare_cleanup_last_success_seconds > 300
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Expired file cleanup has stopped
+      - alert: SecureShareStorageHigh
+        expr: secureshare_stored_bytes > 4294967296
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Storage exceeds 80% of the default quota

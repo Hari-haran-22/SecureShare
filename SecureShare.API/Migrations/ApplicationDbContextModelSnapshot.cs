@@ -40,6 +40,9 @@ namespace SecureShare.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("OperationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("UserAgent")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -47,6 +50,10 @@ namespace SecureShare.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("FileRecordId");
+
+                    b.HasIndex("OperationId")
+                        .IsUnique()
+                        .HasFilter("[OperationId] IS NOT NULL");
 
                     b.ToTable("AccessLogs");
                 });
@@ -64,6 +71,9 @@ namespace SecureShare.API.Migrations
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
 
+                    b.Property<int>("EncryptionVersion")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("datetime2");
 
@@ -74,12 +84,25 @@ namespace SecureShare.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("KeyProtected")
+                        .HasColumnType("bit");
+
                     b.Property<int?>("MaxDownloads")
                         .HasColumnType("int");
 
                     b.Property<string>("OriginalFilename")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OwnerId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("StoredFilename")
                         .IsRequired()
@@ -89,6 +112,10 @@ namespace SecureShare.API.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.HasIndex("IsActive", "ExpiresAt");
 
                     b.ToTable("FileRecords");
                 });

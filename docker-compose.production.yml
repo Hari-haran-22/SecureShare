@@ -1,0 +1,39 @@
+services:
+  secureshare-api:
+    ports: !reset []
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Database__MigrateOnStartup: "false"
+      DataProtection__CertificatePath: /run/secrets/protection.pfx
+      DataProtection__CertificatePasswordFile: /run/secrets/protection-password
+      ReverseProxy__KnownProxies__0: 172.29.50.2
+      HTTPS_PORT: "443"
+    volumes:
+      - ./secrets/protection.pfx:/run/secrets/protection.pfx:ro
+      - ./secrets/protection-password:/run/secrets/protection-password:ro
+    networks: [default, edge]
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN to your public hostname in .env}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      edge:
+        ipv4_address: 172.29.50.2
+    restart: unless-stopped
+    depends_on: [secureshare-api]
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.29.50.0/24
+
+volumes:
+  caddy_data:
+  caddy_config:

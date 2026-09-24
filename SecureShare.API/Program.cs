@@ -1,86 +1,168 @@
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Prometheus;
 using SecureShare.API.Data;
 using SecureShare.API.Services;
+using SecureShare.Core.Entities;
 using SecureShare.Core.Interfaces;
-using Prometheus;
+
+if (args.Contains("--check-health"))
+{
+    try
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var response = await client.GetAsync("http://127.0.0.1:8080/health/ready");
+        Environment.ExitCode = response.IsSuccessStatusCode ? 0 : 1;
+    }
+    catch { Environment.ExitCode = 1; }
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
-
-// --- 1. SETUP DATABASE & SERVICES ---
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString, sqlOptions => 
-    {
-        // Tells the API to retry up to 5 times, waiting between each attempt, 
-        // giving the SQL container plenty of time to boot up!
-        sqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(10),
-            errorNumbersToAdd: null);
-    }));
-
-builder.Services.AddScoped<IFileEncryptionService, FileEncryptionService>();
-builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
-
-builder.Services.AddControllers();
-
-// --- 2. SETUP SWAGGER UI (The Fix) ---
-// We use 'AddSwaggerGen' (Classic), NOT 'AddOpenApi' (New/Raw)
+builder.Logging.ClearProviders();
+builder.Logging.AddJsonConsole();
+var local = builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing");
+var connection = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection.");
+builder.Services.AddDbContext<ApplicationDbContext>(o => o.UseSqlServer(connection, sql => sql.EnableRetryOnFailure()));
+builder.Services.AddOptions<StorageOptions>().BindConfiguration("Storage")
+    .Validate(o => o.MaxFileBytes > 0 && o.MaxFileBytes <= 1024L * 1024 * 1024 &&
+        o.OwnerQuotaBytes >= o.MaxFileBytes && o.TotalQuotaBytes >= o.OwnerQuotaBytes &&
+        o.MaxFilesPerOwner > 0 && o.MaxTotalFiles >= o.MaxFilesPerOwner && o.MaxExpiryHours > 0 && o.MaxDownloads > 0 &&
+        o.CleanupSeconds >= 10 && o.AuditRetentionDays > 0, "Invalid storage limits.").ValidateOnStart();
+var maxFile = builder.Configuration.GetValue<long>("Storage:MaxFileBytes", 100 * 1024 * 1024);
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = maxFile + 1024 * 1024);
+builder.Services.Configure<FormOptions>(o => {
+    o.MultipartBodyLengthLimit = maxFile + 1024 * 1024;
+    o.MemoryBufferThreshold = 65536;
+    o.ValueLengthLimit = 4096;
+});
+var keyPath = Path.GetFullPath(builder.Configuration["DataProtection:KeyPath"] ?? "DataProtectionKeys",
+    builder.Environment.ContentRootPath);
+Directory.CreateDirectory(keyPath);
+var protection = builder.Services.AddDataProtection().SetApplicationName("SecureShare")
+    .PersistKeysToFileSystem(new DirectoryInfo(keyPath));
+var certPath = builder.Configuration["DataProtection:CertificatePath"];
+if (!string.IsNullOrWhiteSpace(certPath))
+{
+    var password = builder.Configuration["DataProtection:CertificatePassword"];
+    var passwordFile = builder.Configuration["DataProtection:CertificatePasswordFile"];
+    if (passwordFile != null) password = File.ReadAllText(passwordFile).TrimEnd('\r', '\n');
+    var cert = X509CertificateLoader.LoadPkcs12FromFile(certPath, password,
+        X509KeyStorageFlags.EphemeralKeySet);
+    protection.ProtectKeysWithCertificate(cert);
+}
+else if (!local) throw new InvalidOperationException("Production requires a DataProtection certificate.");
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(o => {
+    o.Cookie.Name = "SecureShare.Owner";
+    o.Cookie.HttpOnly = true;
+    o.Cookie.SameSite = SameSiteMode.Strict;
+    o.Cookie.SecurePolicy = local ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+    o.ExpireTimeSpan = TimeSpan.FromDays(30);
+    o.SlidingExpiration = true;
+    o.Events.OnRedirectToLogin = c => { c.Response.StatusCode = 401; return Task.CompletedTask; };
+    o.Events.OnRedirectToAccessDenied = c => { c.Response.StatusCode = 403; return Task.CompletedTask; };
+});
+builder.Services.AddAuthorization();
+builder.Services.AddAntiforgery(o => {
+    o.HeaderName = "X-CSRF-TOKEN";
+    o.Cookie.Name = "SecureShare.Csrf";
+    o.Cookie.SameSite = SameSiteMode.Strict;
+    o.Cookie.SecurePolicy = local ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+});
+builder.Services.AddControllersWithViews(o => o.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));
+builder.Services.AddProblemDetails();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
-
+builder.Services.AddScoped<IFileEncryptionService, FileEncryptionService>();
+builder.Services.AddScoped<LocalFileStorageService>();
+builder.Services.AddScoped<IFileStorageService>(s => s.GetRequiredService<LocalFileStorageService>());
+builder.Services.AddScoped<FileKeyProtector>();
+builder.Services.AddScoped<FileScanner>();
+builder.Services.AddScoped<IFileScanner>(s => s.GetRequiredService<FileScanner>());
+builder.Services.AddScoped<FileAccessService>();
+builder.Services.AddScoped<LegacyFileUpgrade>();
+builder.Services.Configure<PasswordHasherOptions>(o => o.IterationCount = 210000);
+builder.Services.AddScoped<IPasswordHasher<FileRecord>, PasswordHasher<FileRecord>>();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database", tags: ["ready"])
+    .AddCheck<ScannerHealthCheck>("scanner", tags: ["ready"])
+    .AddCheck<StorageHealthCheck>("storage", tags: ["ready"]);
+builder.Services.AddHostedService<FileCleanupService>();
+builder.Services.Configure<ForwardedHeadersOptions>(o => {
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    foreach (var proxy in builder.Configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>() ?? [])
+        o.KnownProxies.Add(IPAddress.Parse(proxy));
+});
+builder.Services.AddRateLimiter(o => {
+    o.RejectionStatusCode = 429;
+    o.OnRejected = async (context, token) => {
+        context.HttpContext.Response.Headers.RetryAfter = "60";
+        await context.HttpContext.Response.WriteAsJsonAsync(new { detail = "Too many requests. Try again in a minute." }, token);
+    };
+    o.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+        PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })),
+        PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            context.Request.Path.StartsWithSegments("/health") || context.Request.Path == "/metrics"
+                ? RateLimitPartition.GetNoLimiter("health")
+                : RateLimitPartition.GetConcurrencyLimiter("server",
+                    _ => new ConcurrencyLimiterOptions { PermitLimit = 8, QueueLimit = 0 })));
+    o.AddPolicy("upload", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    o.AddPolicy("download", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 var app = builder.Build();
-
-// --- BULLETPROOF DATABASE MIGRATION ---
-using (var scope = app.Services.CreateScope())
+if (builder.Configuration.GetValue("Database:MigrateOnStartup", local) || args.Contains("--migrate-only"))
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    
-    int maxRetries = 6;
-    for (int i = 0; i < maxRetries; i++)
-    {
-        try
-        {
-            Console.WriteLine($"[DevOps] Attempting to connect to SQL Server... (Attempt {i + 1}/{maxRetries})");
-            dbContext.Database.Migrate(); 
-            Console.WriteLine("[DevOps] Database migration successful! SQL Server is ready.");
-            break; // Success! Exit the loop.
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[DevOps] SQL Server not ready yet: {ex.Message}");
-            if (i == maxRetries - 1) 
-            {
-                Console.WriteLine("[DevOps] Fatal error: Could not connect to SQL Server after 60 seconds.");
-                throw; // Crash the app if it fails after 1 minute
-            }
-            
-            Console.WriteLine("[DevOps] Waiting 10 seconds before retrying...");
-            System.Threading.Thread.Sleep(10000); // Pause the app for 10 seconds
-        }
-    }
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<LegacyFileUpgrade>().RunAsync();
 }
-// --------------------------------------
+if (args.Contains("--migrate-only")) return;
 
-// --- 3. ENABLE THE UI ---
-
-// --- 3. ENABLE THE UI ---
-if (app.Environment.IsDevelopment())
+app.UseForwardedHeaders();
+app.UseExceptionHandler();
+if (!local)
 {
-    app.UseSwagger(); // Generates the JSON
-    app.UseSwaggerUI(); // Generates the HTML page
+    app.UseHsts();
+    app.UseWhen(c => !c.Request.Path.StartsWithSegments("/health") && c.Request.Path != "/metrics",
+        branch => branch.UseHttpsRedirection());
 }
-// ------------------------
-app.UseDefaultFiles(); // Looks for index.html
-app.UseStaticFiles();  // Serves files from the wwwroot folder
-app.UseHttpsRedirection();
-app.UseAuthorization();
-app.MapControllers();
-// Expose the /metrics endpoint
-app.UseMetricServer();
-
-// Automatically track HTTP request duration, errors, etc.
+app.Use(async (context, next) => {
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    if (!(app.Environment.IsDevelopment() && context.Request.Path.StartsWithSegments("/swagger")))
+        context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+    if (context.Request.Path.StartsWithSegments("/api"))
+        context.Response.Headers.CacheControl = "no-store";
+    await next();
+});
+app.UseRouting();
 app.UseHttpMetrics();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
+if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new() { Predicate = c => c.Tags.Contains("ready") });
+app.MapMetrics();
+app.MapControllers();
+await app.RunAsync();
 
-app.Run();
+public partial class Program { }

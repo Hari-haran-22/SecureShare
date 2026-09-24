@@ -1,49 +1,76 @@
 pipeline {
-    agent any
-    
-    // Hardcoding the GitHub Webhook trigger directly into the pipeline
-    triggers {
-        githubPush()
+    agent { label 'linux-docker-dotnet' }
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
     }
-    environment {
-        // These match the exact IDs you just created in the Jenkins vault
-        IMAGE_NAME = 'hari2haran2/secureshare-api' 
-        DOCKER_CRED_ID = 'docker-hub-id'
-        AWS_CRED_ID = 'aws-ssh-key-id'
-        AWS_IP = '44.223.85.61'
-        DOCKER_HOST = 'tcp://127.0.0.1:2375'
+    triggers { githubPush() }
+    parameters {
+        string(name: 'IMAGE_NAME', defaultValue: 'hari2haran2/secureshare-api', description: 'Docker Hub image repository')
+        string(name: 'DEPLOY_HOST', defaultValue: '13.60.23.3', description: 'Approved AWS deployment host')
+        string(name: 'SSH_CREDENTIAL_ID', defaultValue: 'aws-ssh-key-id', description: 'Jenkins SSH key credential for the selected AWS server')
     }
-
     stages {
-        stage('Build Image') {
+        stage('Validate inputs') {
             steps {
-                echo 'Compiling .NET code and building Docker Image...'
-                // 'bat' tells Jenkins to run a Windows command prompt 
-                bat "docker build -t ${IMAGE_NAME}:latest ."
-            }
-        }
-        
-        stage('Push to Registry') {
-            steps {
-                echo 'Securely logging into Docker Hub and pushing image...'
-                withCredentials([usernamePassword(credentialsId: DOCKER_CRED_ID, passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                    // Bypassing the Windows echo pipe by using the direct -p flag
-                    bat "docker login -u %DOCKER_USER% -p \"%DOCKER_PASS%\""
-                    bat "docker push ${IMAGE_NAME}:latest"
+                script {
+                    if (!(params.IMAGE_NAME ==~ /[a-z0-9][a-z0-9._\/-]+/) ||
+                        !(params.DEPLOY_HOST ==~ /[a-zA-Z0-9.-]*/) ||
+                        !(params.SSH_CREDENTIAL_ID ==~ /[a-zA-Z0-9_.-]+/)) {
+                        error('Invalid image or deployment address')
+                    }
                 }
             }
         }
-
-        stage('Deploy to AWS') {
+        stage('Restore, build and test') {
             steps {
-                echo 'Connecting to AWS server to deploy new container...'
-                withCredentials([sshUserPrivateKey(credentialsId: 'aws-ssh-key-id', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
-                    
-                    // 1. Get the EXACT active Windows background user and lock the key to them
-                    bat "FOR /F \"tokens=*\" %%i IN ('whoami') DO icacls \"%SSH_KEY%\" /inheritance:r /grant \"%%i:R\""
-                    
-                    // 2. Connect via SSH and execute the Docker deployment commands
-                    bat "ssh -o StrictHostKeyChecking=no -i \"%SSH_KEY%\" %SSH_USER%@%AWS_IP% \"git clone https://github.com/Hari-haran-22/SecureShare.git || (cd SecureShare && git pull) && cd SecureShare && sudo docker pull hari2haran2/secureshare-api:latest && sudo docker compose up -d\""
+                sh 'dotnet restore SecureShare.slnx --locked-mode'
+                sh 'dotnet test SecureShare.slnx -c Release --no-restore --logger "trx;LogFileName=tests.trx"'
+                sh 'dotnet ef migrations has-pending-model-changes --project SecureShare.API --configuration Release --no-build'
+            }
+            post { always { archiveArtifacts artifacts: '**/TestResults/*.trx', allowEmptyArchive: true } }
+        }
+        stage('Security and infrastructure checks') {
+            steps {
+                sh 'trivy fs --scanners vuln,secret,misconfig --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .git,SecureShare.API/SecureUploads,secrets,backups .'
+                sh 'terraform -chdir=teraform fmt -check'
+                sh 'terraform -chdir=teraform init -backend=false'
+                sh 'terraform -chdir=teraform validate'
+            }
+        }
+        stage('Build and scan image') {
+            steps {
+                sh 'docker build --pull -t "$IMAGE_NAME:$GIT_COMMIT" .'
+                sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL "$IMAGE_NAME:$GIT_COMMIT"'
+            }
+        }
+        stage('Push image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-id', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+                    sh '''
+                        set +x
+                        printf '%s' "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push "$IMAGE_NAME:$GIT_COMMIT"
+                        docker logout
+                    '''
+                }
+            }
+        }
+        stage('Deploy and verify') {
+            when { expression { params.DEPLOY_HOST.trim() != '' } }
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: params.SSH_CREDENTIAL_ID,
+                                      keyFileVariable: 'SSH_KEY',
+                                      usernameVariable: 'SSH_USERNAME')
+                ]) {
+                        sh '''
+                            set +x
+                            ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+                                -o UserKnownHostsFile="$WORKSPACE/deploy/known_hosts" "$SSH_USERNAME@$DEPLOY_HOST" \
+                                bash -s -- "$GIT_COMMIT" "$IMAGE_NAME:$GIT_COMMIT" < scripts/remote-deploy.sh
+                        '''
                 }
             }
         }

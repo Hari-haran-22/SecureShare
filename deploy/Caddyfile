@@ -1,0 +1,6 @@
+{$DOMAIN} {
+    encode zstd gzip
+    @private path /metrics /swagger*
+    respond @private 404
+    reverse_proxy secureshare-api:8080
+}

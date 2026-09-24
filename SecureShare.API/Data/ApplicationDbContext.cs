@@ -13,5 +13,13 @@ namespace SecureShare.API.Data
         // These two lines represent your tables in the database
         public DbSet<FileRecord> FileRecords { get; set; }
         public DbSet<AccessLog> AccessLogs { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<FileRecord>().HasIndex(f => f.OwnerId);
+            modelBuilder.Entity<AccessLog>().HasIndex(l => l.OperationId).IsUnique().HasFilter("[OperationId] IS NOT NULL");
+            modelBuilder.Entity<FileRecord>().HasIndex(f => new { f.IsActive, f.ExpiresAt });
+            modelBuilder.Entity<FileRecord>().Property(f => f.OwnerId).HasMaxLength(64);
+        }
     }
 }

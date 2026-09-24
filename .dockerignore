@@ -2,3 +2,12 @@
 .vs/
 **/bin/
 **/obj/
+**/SecureUploads/
+**/DataProtectionKeys/
+secrets/
+backups/
+.env
+*.tfstate*
+**/.terraform/
+**/*.pfx
+report.docx

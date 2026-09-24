@@ -5,6 +5,7 @@ namespace SecureShare.Core.Entities
     public class AccessLog
     {
         public int Id { get; set; } // Internal ID, doesn't need to be exposed
+        public Guid? OperationId { get; set; }
         public Guid FileRecordId { get; set; } // Foreign Key
         public string IpAddress { get; set; } = string.Empty;
         public string UserAgent { get; set; } = string.Empty; // Browser details

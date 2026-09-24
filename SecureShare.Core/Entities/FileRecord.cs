@@ -16,6 +16,11 @@ namespace SecureShare.Core.Entities
 
         public byte[] EncryptionKey { get; set; } = Array.Empty<byte>();
         public byte[] IV { get; set; } = Array.Empty<byte>();
+        public int EncryptionVersion { get; set; }
+        public bool KeyProtected { get; set; }
+        public string? OwnerId { get; set; }
+        public long SizeBytes { get; set; }
+        public string? PasswordHash { get; set; }
 
         // Navigation property for the relationship
         public ICollection<AccessLog> AccessLogs { get; set; } = new List<AccessLog>();

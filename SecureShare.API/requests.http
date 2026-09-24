@@ -1,0 +1,13 @@
+@host = http://localhost:8080
+
+### Start an owner session; reuse its cookie and csrfToken for mutations.
+GET {{host}}/api/session
+
+### List the current owner's uploads.
+GET {{host}}/api/files
+
+### Readiness includes SQL Server, writable storage, and scanning when enabled.
+GET {{host}}/health/ready
+
+### Liveness does not require external services.
+GET {{host}}/health/live

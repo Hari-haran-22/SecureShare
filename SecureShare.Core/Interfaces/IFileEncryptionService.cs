@@ -9,6 +9,6 @@ namespace SecureShare.Core.Interfaces
         Task<(byte[] Key, byte[] IV)> EncryptAsync(Stream inputStream, Stream outputStream);
 
         // Decrypts a file stream using the provided key and IV
-        Task DecryptAsync(Stream inputStream, Stream outputStream, byte[] key, byte[] iv);
+        Task DecryptAsync(Stream inputStream, Stream outputStream, byte[] key, byte[] iv, int version = 2);
     }
 }

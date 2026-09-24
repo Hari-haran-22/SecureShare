@@ -1,191 +1,25 @@
-﻿<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SecureShare .NET</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #121212;
-            color: #ffffff;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-
-        .container {
-            background-color: #1e1e1e;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            width: 100%;
-            max-width: 500px;
-            text-align: center;
-        }
-
-        h1 {
-            color: #bb86fc;
-            margin-bottom: 5px;
-        }
-
-        p {
-            color: #aaaaaa;
-            margin-bottom: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-        }
-
-        input[type="file"], input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #333;
-            background-color: #2d2d2d;
-            color: white;
-            box-sizing: border-box;
-        }
-
-        button {
-            background-color: #bb86fc;
-            color: #121212;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            transition: background-color 0.3s;
-        }
-
-            button:hover {
-                background-color: #9965f4;
-            }
-
-        #resultArea {
-            margin-top: 30px;
-            display: none;
-            padding: 15px;
-            background-color: #2d2d2d;
-            border-radius: 5px;
-            border-left: 4px solid #03dac6;
-        }
-
-        a.download-link {
-            color: #03dac6;
-            word-break: break-all;
-            font-weight: bold;
-            text-decoration: none;
-        }
-
-            a.download-link:hover {
-                text-decoration: underline;
-            }
-
-        .loader {
-            display: none;
-            margin-top: 20px;
-            color: #bb86fc;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="container">
-        <h1>SecureShare </h1>
-        <p>Encrypted, Self-Destructing File Sharing</p>
-
-        <div class="form-group">
-            <label for="fileInput">Select File to Encrypt:</label>
-            <input type="file" id="fileInput" required>
-        </div>
-
-        <div class="form-group">
-            <label for="expiryHours">Expire after (Hours):</label>
-            <input type="number" id="expiryHours" value="24" min="1">
-        </div>
-
-        <div class="form-group">
-            <label for="maxDownloads">Max Downloads:</label>
-            <input type="number" id="maxDownloads" value="1" min="1">
-        </div>
-
-        <button id="uploadBtn" onclick="uploadFile()">Encrypt & Generate Link</button>
-        <div id="loading" class="loader">Encrypting file... Please wait.</div>
-
-        <div id="resultArea">
-            <p style="color: white; margin-bottom: 10px;">Success! Share this secure link:</p>
-            <a id="downloadUrl" class="download-link" href="#" target="_blank"></a>
-            <p style="font-size: 12px; margin-top: 15px;">Link will self-destruct after it is downloaded.</p>
-        </div>
-    </div>
-
-    <script>
-    async function uploadFile() {
-        const fileInput = document.getElementById('fileInput');
-        const expiryHours = document.getElementById('expiryHours').value;
-        const maxDownloads = document.getElementById('maxDownloads').value;
-        const uploadBtn = document.getElementById('uploadBtn');
-        const loading = document.getElementById('loading');
-        const resultArea = document.getElementById('resultArea');
-
-        if (!fileInput.files[0]) {
-            alert("Please select a file first.");
-            return;
-        }
-
-        // Prepare the UI
-        uploadBtn.style.display = 'none';
-        loading.style.display = 'block';
-        resultArea.style.display = 'none';
-
-        // Build the form data to send to the API
-        const formData = new FormData();
-        formData.append("file", fileInput.files[0]);
-        formData.append("expiryHours", expiryHours);
-        formData.append("maxDownloads", maxDownloads);
-
-        try {
-            // Call your .NET API
-            const response = await fetch('/api/files/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-
-                // Display the secure link
-                const linkElement = document.getElementById('downloadUrl');
-                linkElement.href = data.url;
-                linkElement.innerText = data.url;
-                resultArea.style.display = 'block';
-            } else {
-                alert("Error uploading file. Check console for details.");
-            }
-        } catch (error) {
-            console.error("Upload failed:", error);
-            alert("Network error. Is the server running?");
-        } finally {
-            // Reset the UI
-            loading.style.display = 'none';
-            uploadBtn.style.display = 'block';
-            fileInput.value = ''; // clear the file input
-        }
-    }
-    </script>
-
-</body>
-</html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SecureShare — private file sharing</title><link rel="stylesheet" href="/styles.css"><script src="/app.js" defer></script></head>
+<body><main>
+<header><a class="brand" href="/">SecureShare</a><span class="badge">Encrypted file sharing</span></header>
+<section class="intro"><h1>Share a file. Stay in control.</h1><p>Set an expiry, limit downloads, and add a password. Revoke access whenever you need.</p></section>
+<div class="layout"><section class="card"><h2>Create a share link</h2>
+<form id="uploadForm">
+<label class="drop" for="fileInput"><strong>Choose a file or drop it here</strong><span id="fileHint">Up to 100 MB</span><input type="file" id="fileInput" required></label>
+<div class="fields"><label>Expires after (hours)<input type="number" id="expiryHours" value="24" min="1" max="168" required></label><label>Allowed downloads<input type="number" id="maxDownloads" value="1" min="1" max="100" required></label></div>
+<label>File password <span class="muted">(optional)</span><input type="password" id="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="At least 8 characters"></label>
+<button id="uploadBtn" type="submit">Encrypt & create link</button>
+<div id="uploadProgress" hidden><progress id="progress" max="100" value="0"></progress><p id="progressText" role="status">Uploading…</p><button id="cancelBtn" type="button" class="secondary">Cancel upload</button></div>
+</form>
+<div id="resultArea" class="result" hidden><h3>Your link is ready</h3><a id="downloadUrl"></a><p id="expiryResult"></p><button id="copyBtn" type="button" class="secondary">Copy link</button></div>
+<p id="status" role="status" aria-live="polite"></p>
+</section>
+<section class="card"><h2>Your private dashboard</h2><p>Uploads are managed through this browser. Save your recovery code to access them on another device.</p>
+<details><summary>Recovery & access</summary><p>Keep this code private. Anyone with it can manage your uploads.</p><code id="recoveryCode"></code><button id="saveRecovery" class="secondary" type="button">Copy recovery code</button><form id="restoreForm"><label>Restore another dashboard<input id="restoreCode" minlength="64" maxlength="64" required autocomplete="off" placeholder="64-character recovery code"></label><button type="submit" class="secondary">Restore access</button></form></details>
+<p class="muted">Expiry, revocation, or the last allowed download removes stored file data during the next cleanup cycle. Recent history is retained for 30 days.</p></section></div>
+<section class="card dashboard"><div class="section-head"><h2>Your uploads</h2><button id="refreshBtn" class="secondary" type="button">Refresh</button></div><div id="fileList" aria-live="polite"><p>Loading uploads…</p></div></section>
+<footer>Encryption protects stored files. Share links and recovery codes are private credentials.</footer>
+<dialog id="logsDialog"><h2>Download history</h2><div id="logsContent"></div><button id="closeLogs" type="button">Close</button></dialog>
+</main></body></html>

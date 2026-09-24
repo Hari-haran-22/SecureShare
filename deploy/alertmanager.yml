@@ -1,0 +1,11 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: local
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+# Alerts are visible at localhost:9093. Configure a receiver for external delivery.
+receivers:
+  - name: local

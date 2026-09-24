@@ -1,57 +1,36 @@
-﻿using SecureShare.Core.Interfaces;
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
+using SecureShare.Core.Interfaces;
 
-namespace SecureShare.API.Services
+namespace SecureShare.API.Services;
+
+public class LocalFileStorageService : IFileStorageService
 {
-    public class LocalFileStorageService : IFileStorageService
+    public string RootPath { get; }
+    public LocalFileStorageService(IWebHostEnvironment env, IOptions<StorageOptions> options)
     {
-        private readonly string _storagePath;
-
-        public LocalFileStorageService(IWebHostEnvironment env)
-        {
-            // Saves files in a folder named "SecureUploads" in the project root
-            _storagePath = Path.Combine(env.ContentRootPath, "SecureUploads");
-
-            if (!Directory.Exists(_storagePath))
-            {
-                Directory.CreateDirectory(_storagePath);
-            }
-        }
-
-        public async Task<string> SaveFileAsync(Stream fileStream, string fileName)
-        {
-            // We use a GUID name to prevent overwriting existing files
-            var uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(fileName)}";
-            var fullPath = Path.Combine(_storagePath, uniqueFileName);
-
-            using var fileOutput = new FileStream(fullPath, FileMode.Create);
-            await fileStream.CopyToAsync(fileOutput);
-
-            return uniqueFileName;
-        }
-
-        public Task<Stream> GetFileStreamAsync(string storedFileName)
-        {
-            var fullPath = Path.Combine(_storagePath, storedFileName);
-            if (!File.Exists(fullPath))
-            {
-                throw new FileNotFoundException("File not found on disk.");
-            }
-
-            // Return read-only stream
-            return Task.FromResult<Stream>(new FileStream(fullPath, FileMode.Open, FileAccess.Read));
-        }
-
-        public Task DeleteFileAsync(string storedFileName)
-        {
-            var fullPath = Path.Combine(_storagePath, storedFileName);
-            if (File.Exists(fullPath))
-            {
-                File.Delete(fullPath);
-            }
-            return Task.CompletedTask;
-        }
+        RootPath = Path.GetFullPath(options.Value.Path, env.ContentRootPath);
+        Directory.CreateDirectory(RootPath);
     }
+    private string Resolve(string name)
+    {
+        if (string.IsNullOrEmpty(name) || name != Path.GetFileName(name) || name.Contains('/') || name.Contains('\\'))
+            throw new IOException("Invalid stored filename.");
+        return Path.Combine(RootPath, name);
+    }
+    public async Task<string> SaveFileAsync(Stream stream, string fileName)
+    {
+        var name = $"{Guid.NewGuid():N}.enc";
+        var path = Resolve(name);
+        try
+        {
+            await using var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true);
+            await stream.CopyToAsync(output);
+            await output.FlushAsync();
+            return name;
+        }
+        catch { File.Delete(path); throw; }
+    }
+    public Task<Stream> GetFileStreamAsync(string name) => Task.FromResult<Stream>(
+        new FileStream(Resolve(name), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, true));
+    public Task DeleteFileAsync(string name) { File.Delete(Resolve(name)); return Task.CompletedTask; }
 }

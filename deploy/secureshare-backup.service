@@ -1,0 +1,8 @@
+[Unit]
+Description=Consistent SecureShare backup
+After=docker.service
+Requires=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/secureshare
+ExecStart=/usr/bin/bash /opt/secureshare/scripts/backup.sh --production

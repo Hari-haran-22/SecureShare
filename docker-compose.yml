@@ -1,49 +1,126 @@
-version: '3.8'
-
 services:
+  volume-init:
+    image: alpine:3.22
+    user: "0:0"
+    volumes:
+      - uploads:/data/uploads
+      - protection_keys:/data/keys
+      - database_backups:/data/backups
+    command: ["sh", "-c", "chown 1654:1654 /data/uploads /data/keys; chmod 700 /data/uploads /data/keys; chown 10001:0 /data/backups; chmod 770 /data/backups"]
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: sqlserver
+    image: mcr.microsoft.com/mssql/server:2022-CU22-ubuntu-22.04
     environment:
-      - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=SuperSecretPassw0rd! # Note: In production, store this in Jenkins credentials!
-    ports:
-      - "1433:1433"
-    restart: always
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Run scripts/Initialize.ps1 first}
+    volumes:
+      - sql_data:/var/opt/mssql
+      - database_backups:/var/opt/mssql/backups
+    healthcheck:
+      test: ["CMD-SHELL", "SQLCMDPASSWORD=$$MSSQL_SA_PASSWORD /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
 
   secureshare-api:
-    image: hari2haran2/secureshare-api:latest
-    container_name: secureshare-api
+    image: ${API_IMAGE:-secureshare-api:local}
+    build: .
     ports:
-      - "8080:8080"
-    restart: always
+      - "127.0.0.1:8080:8080"
     environment:
-      # This overrides your local appsettings.json and points the API to the new container!
-      - ConnectionStrings__DefaultConnection=Server=db,1433;Database=SecureShareDb;User Id=sa;Password=SuperSecretPassw0rd!;TrustServerCertificate=True;
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Server=db,1433;Database=SecureShareDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True;"
+      Storage__Path: /app/SecureUploads
+      DataProtection__KeyPath: /app/DataProtectionKeys
+      Scanner__Enabled: "true"
+      Scanner__Host: clamav
+      Database__MigrateOnStartup: "true"
+    volumes:
+      - uploads:/app/SecureUploads
+      - protection_keys:/app/DataProtectionKeys
     depends_on:
-      - db
+      volume-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "dotnet", "SecureShare.API.dll", "--check-health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  clamav:
+    image: clamav/clamav:1.4.5
+    volumes:
+      - clamav_data:/var/lib/clamav
+      - ./deploy/clamd.conf:/etc/clamav/clamd.conf:ro
+    restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
+    image: prom/prometheus:v3.13.3
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
-    depends_on:
-      - secureshare-api
+      - "127.0.0.1:9090:9090"
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.0
+    volumes:
+      - ./deploy/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
+    image: grafana/grafana:13.2.2
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    depends_on:
-      - prometheus
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Run scripts/Initialize.ps1 first}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
-      # Inject our provisioning scripts
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      # Inject the actual JSON dashboard file
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    restart: unless-stopped
+
+  backup:
+    image: secureshare-backup:local
+    build: ./deploy/backup
+    profiles: [tools]
+    volumes:
+      - uploads:/data/uploads:ro
+      - protection_keys:/data/keys:ro
+      - database_backups:/data/database:ro
+      - ./secrets:/data/secrets:ro
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["set -e; umask 077; tar -czf /tmp/snapshot.tar.gz -C /data uploads keys database secrets/protection.pfx secrets/protection-password; gpg --batch --symmetric --cipher-algo AES256 --pinentry-mode loopback --passphrase-file /data/secrets/backup-password --output /backups/secureshare-$$(date -u +%Y%m%dT%H%M%SZ).tar.gz.gpg /tmp/snapshot.tar.gz"]
+
+volumes:
+  sql_data:
+  uploads:
+  protection_keys:
+  database_backups:
+  clamav_data:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
