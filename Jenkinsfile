@@ -12,7 +12,7 @@ pipeline {
     }
     parameters {
         string(name: 'IMAGE_NAME', defaultValue: 'hari2haran2/secureshare-api', description: 'Docker Hub image repository')
-        string(name: 'DEPLOY_HOST', defaultValue: '13.60.23.3', description: 'Approved AWS deployment host')
+        string(name: 'DEPLOY_HOST', defaultValue: '', description: 'Application node public address; leave blank for CI-only builds')
         string(name: 'APP_PRIVATE_IP', defaultValue: '', description: 'Application node private IPv4 address')
         string(name: 'SERVICES_HOST', defaultValue: '', description: 'Scanner/monitoring node public IPv4 address')
         string(name: 'SCANNER_PRIVATE_IP', defaultValue: '', description: 'Scanner node private IPv4 address')
@@ -31,13 +31,24 @@ pipeline {
         stage('Validate inputs') {
             steps {
                 script {
+                    def deployValues = [
+                        params.DEPLOY_HOST.trim(),
+                        params.APP_PRIVATE_IP.trim(),
+                        params.SERVICES_HOST.trim(),
+                        params.SCANNER_PRIVATE_IP.trim()
+                    ]
+                    def deployRequested = deployValues.any { it != '' }
+
                     if (!(params.IMAGE_NAME ==~ /[a-z0-9][a-z0-9._\/-]+/) ||
                         !(params.DEPLOY_HOST ==~ /[a-zA-Z0-9.-]*/) ||
-                        !(params.APP_PRIVATE_IP ==~ /[0-9]{1,3}(\.[0-9]{1,3}){3}/) ||
+                        !(params.APP_PRIVATE_IP ==~ /([0-9]{1,3}(\.[0-9]{1,3}){3})?/) ||
                         !(params.SERVICES_HOST ==~ /[a-zA-Z0-9.-]*/) ||
-                        !(params.SCANNER_PRIVATE_IP ==~ /[0-9]{1,3}(\.[0-9]{1,3}){3}/) ||
+                        !(params.SCANNER_PRIVATE_IP ==~ /([0-9]{1,3}(\.[0-9]{1,3}){3})?/) ||
                         !(params.SSH_CREDENTIAL_ID ==~ /[a-zA-Z0-9_.-]+/)) {
                         error('Invalid image or deployment address')
+                    }
+                    if (deployRequested && deployValues.any { it == '' }) {
+                        error('All four deployment addresses are required when deployment is enabled')
                     }
                 }
             }
@@ -77,7 +88,14 @@ pipeline {
             }
         }
         stage('Deploy and verify') {
-            when { expression { params.DEPLOY_HOST.trim() != '' && params.SERVICES_HOST.trim() != '' } }
+            when {
+                expression {
+                    params.DEPLOY_HOST.trim() != '' &&
+                    params.APP_PRIVATE_IP.trim() != '' &&
+                    params.SERVICES_HOST.trim() != '' &&
+                    params.SCANNER_PRIVATE_IP.trim() != ''
+                }
+            }
             steps {
                 withCredentials([
                     sshUserPrivateKey(credentialsId: params.SSH_CREDENTIAL_ID,
