@@ -115,7 +115,7 @@ pipeline {
                                 bash -s -- "%GIT_COMMIT%" "%IMAGE_NAME%:%GIT_COMMIT%" services "%APP_PRIVATE_IP%" < scripts\\remote-deploy.sh
                             ssh -i "%SSH_KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ^
                                 -o UserKnownHostsFile="%WORKSPACE%\\deploy\\known_hosts" "%SSH_USERNAME%@%DEPLOY_HOST%" ^
-                                bash -s -- "%GIT_COMMIT%" "%IMAGE_NAME%:%GIT_COMMIT%" app "%SCANNER_PRIVATE_IP%" < scripts\\remote-deploy.sh
+                                bash -s -- "%GIT_COMMIT%" "%IMAGE_NAME%:%GIT_COMMIT%" app "%SCANNER_PRIVATE_IP%" "%DEPLOY_HOST%" < scripts\\remote-deploy.sh
                         '''
                 }
             }
