@@ -50,4 +50,9 @@ if grep -q '^API_IMAGE=' .env; then
 else
     printf '\nAPI_IMAGE=%s\n' "$image" >> .env
 fi
+if grep -q '^SCANNER_HOST=' .env; then
+    sed -i "s|^SCANNER_HOST=.*|SCANNER_HOST=$scanner_host|" .env
+else
+    printf 'SCANNER_HOST=%s\n' "$scanner_host" >> .env
+fi
 echo 'Deployment passed readiness checks.'
