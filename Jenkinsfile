@@ -9,6 +9,7 @@ pipeline {
     triggers { githubPush() }
     environment {
         DOCKER_HOST = 'tcp://127.0.0.1:2375'
+        TF_PLUGIN_CACHE_DIR = 'C:\\ProgramData\\Jenkins\\.jenkins\\terraform-plugin-cache'
     }
     parameters {
         string(name: 'IMAGE_NAME', defaultValue: 'hari2haran2/secureshare-api', description: 'Docker Hub image repository')
@@ -66,7 +67,10 @@ pipeline {
                 bat 'docker version --format "Docker server {{.Server.Version}}"'
                 bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v "%WORKSPACE%:/src" -w /src aquasec/trivy:0.67.2 fs --timeout 15m --scanners vuln,secret,misconfig --ignorefile .trivyignore.yaml --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .git,SecureShare.API/SecureUploads,secrets,backups .'
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform fmt -check'
-                bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform init -backend=false'
+                bat 'if not exist "%TF_PLUGIN_CACHE_DIR%" mkdir "%TF_PLUGIN_CACHE_DIR%"'
+                retry(3) {
+                    bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform init -backend=false'
+                }
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform validate'
             }
         }
