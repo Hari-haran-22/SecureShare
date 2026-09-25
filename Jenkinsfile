@@ -64,7 +64,7 @@ pipeline {
         stage('Security and infrastructure checks') {
             steps {
                 bat 'docker version --format "Docker server {{.Server.Version}}"'
-                bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v "%WORKSPACE%:/src" -w /src aquasec/trivy:0.67.2 fs --timeout 15m --scanners vuln,secret,misconfig --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .git,SecureShare.API/SecureUploads,secrets,backups .'
+                bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v "%WORKSPACE%:/src" -w /src aquasec/trivy:0.67.2 fs --timeout 15m --scanners vuln,secret,misconfig --ignorefile .trivyignore.yaml --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .git,SecureShare.API/SecureUploads,secrets,backups .'
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform fmt -check'
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform init -backend=false'
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform validate'

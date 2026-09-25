@@ -1,0 +1,6 @@
+misconfigurations:
+  - id: aws-vpc-no-public-egress-sgr
+    paths:
+      - "main.tf"
+      - "teraform/main.tf"
+    statement: Public HTTP and HTTPS egress are required for Ubuntu updates, container pulls, AWS SSM, and ACME certificate issuance.
