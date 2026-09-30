@@ -3,4 +3,9 @@ misconfigurations:
     paths:
       - "main.tf"
       - "teraform/main.tf"
+      - "infrastructure.yaml"
     statement: Public HTTP and HTTPS egress are required for Ubuntu updates, container pulls, AWS SSM, and ACME certificate issuance.
+  - id: AVD-AWS-0028
+    paths:
+      - "infrastructure.yaml"
+    statement: The CloudFormation instances explicitly set MetadataOptions.HttpTokens to required; Trivy 0.67.2 does not recognize the valid CloudFormation property.

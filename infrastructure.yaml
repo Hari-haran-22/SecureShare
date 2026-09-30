@@ -76,7 +76,7 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: !Ref PublicSubnetCidr
-      MapPublicIpOnLaunch: true
+      MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [0, !GetAZs '']
       Tags:
         - {Key: Name, Value: SecureShare-Public}
@@ -208,9 +208,15 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !If [HasSshKey, !Ref SshKeyName, !Ref AWS::NoValue]
       IamInstanceProfile: !Ref InstanceProfile
-      SubnetId: !Ref PublicSubnet
-      SecurityGroupIds: [!Ref AppSecurityGroup]
-      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: '0'
+          GroupSet: [!Ref AppSecurityGroup]
+          SubnetId: !Ref PublicSubnet
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs: {VolumeSize: 30, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
@@ -248,9 +254,15 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !If [HasSshKey, !Ref SshKeyName, !Ref AWS::NoValue]
       IamInstanceProfile: !Ref InstanceProfile
-      SubnetId: !Ref PublicSubnet
-      SecurityGroupIds: [!Ref ServicesSecurityGroup]
-      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          DeviceIndex: '0'
+          GroupSet: [!Ref ServicesSecurityGroup]
+          SubnetId: !Ref PublicSubnet
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs: {VolumeSize: 16, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
