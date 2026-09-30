@@ -10,6 +10,9 @@ RUN dotnet publish SecureShare.API/SecureShare.API.csproj -c Release --no-restor
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
 RUN mkdir -p /app/SecureUploads /app/DataProtectionKeys && chown -R $APP_UID:$APP_UID /app/SecureUploads /app/DataProtectionKeys
 USER $APP_UID
