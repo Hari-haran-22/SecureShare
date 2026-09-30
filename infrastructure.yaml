@@ -1,0 +1,317 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SecureShare two-node AWS infrastructure equivalent to the Terraform configuration.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+  VpcCidr:
+    Type: String
+    Default: 10.42.0.0/16
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.42.1.0/24
+  PrivateSubnetCidr:
+    Type: String
+    Default: 10.42.2.0/24
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: Ubuntu 24.04 amd64 gp3 AMI for the selected region.
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+  SshKeyName:
+    Type: String
+    Default: ''
+    Description: Optional EC2 key pair name. Leave blank to use Session Manager only.
+  SshCidr:
+    Type: String
+    Default: ''
+    Description: Optional trusted IPv4 CIDR for SSH. Never use 0.0.0.0/0.
+  BudgetNotificationEmail:
+    Type: String
+    Default: ''
+    Description: Optional email address for 80 percent forecast and 100 percent actual budget alerts.
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 5
+    MinValue: 1
+
+Conditions:
+  HasSshKey: !Not [!Equals [!Ref SshKeyName, '']]
+  HasSshCidr: !Not [!Equals [!Ref SshCidr, '']]
+  HasBudgetEmail: !Not [!Equals [!Ref BudgetNotificationEmail, '']]
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - {Key: Name, Value: SecureShare-VPC}
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - {Key: Name, Value: SecureShare-Internet-Gateway}
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetCidr
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - {Key: Name, Value: SecureShare-Public}
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrivateSubnetCidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - {Key: Name, Value: SecureShare-Private}
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - {Key: Name, Value: SecureShare-Public-Routes}
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - {Key: Name, Value: SecureShare-Private-Routes}
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public HTTPS and private application metrics
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 8080, ToPort: 8080, CidrIp: !Ref VpcCidr}
+        - !If
+          - HasSshCidr
+          - {IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref SshCidr}
+          - !Ref AWS::NoValue
+      SecurityGroupEgress:
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 3310, ToPort: 3310, CidrIp: !Ref VpcCidr}
+      Tags:
+        - {Key: Name, Value: SecureShare-App-SG}
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  ServicesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private scanner and monitoring services
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 3310, ToPort: 3310, CidrIp: !Ref VpcCidr}
+        - !If
+          - HasSshCidr
+          - {IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref SshCidr}
+          - !Ref AWS::NoValue
+      SecurityGroupEgress:
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 8080, ToPort: 8080, CidrIp: !Ref VpcCidr}
+      Tags:
+        - {Key: Name, Value: SecureShare-Services-SG}
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - {Key: Project, Value: SecureShare}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !If [HasSshKey, !Ref SshKeyName, !Ref AWS::NoValue]
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds: [!Ref AppSecurityGroup]
+      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs: {VolumeSize: 30, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euo pipefail
+          apt-get update
+          apt-get install -y ca-certificates curl git
+          install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          chmod a+r /etc/apt/keyrings/docker.asc
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
+          apt-get update
+          apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          fallocate -l 4G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+          install -d -m 0700 -o ubuntu -g ubuntu /opt/secureshare
+      Tags:
+        - {Key: Name, Value: SecureShare-App}
+        - {Key: Project, Value: SecureShare}
+        - {Key: Role, Value: app}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  ServicesInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !If [HasSshKey, !Ref SshKeyName, !Ref AWS::NoValue]
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds: [!Ref ServicesSecurityGroup]
+      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs: {VolumeSize: 16, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euo pipefail
+          apt-get update
+          apt-get install -y ca-certificates curl git
+          install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          chmod a+r /etc/apt/keyrings/docker.asc
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
+          apt-get update
+          apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          fallocate -l 4G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+          install -d -m 0700 -o ubuntu -g ubuntu /opt/secureshare
+      Tags:
+        - {Key: Name, Value: SecureShare-Services}
+        - {Key: Project, Value: SecureShare}
+        - {Key: Role, Value: services}
+        - {Key: ManagedBy, Value: CloudFormation}
+        - {Key: Environment, Value: !Ref Environment}
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Condition: HasBudgetEmail
+    Properties:
+      Budget:
+        BudgetName: SecureShare-Monthly-Cost
+        BudgetLimit: {Amount: !Ref MonthlyBudgetUsd, Unit: USD}
+        BudgetType: COST
+        CostFilters:
+          TagKeyValue: [user:Project$SecureShare]
+        TimeUnit: MONTHLY
+      NotificationsWithSubscribers:
+        - Notification:
+            ComparisonOperator: GREATER_THAN
+            NotificationType: FORECASTED
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - {Address: !Ref BudgetNotificationEmail, SubscriptionType: EMAIL}
+        - Notification:
+            ComparisonOperator: GREATER_THAN
+            NotificationType: ACTUAL
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - {Address: !Ref BudgetNotificationEmail, SubscriptionType: EMAIL}
+
+Outputs:
+  VpcId: {Value: !Ref Vpc}
+  PublicSubnetId: {Value: !Ref PublicSubnet}
+  PrivateSubnetId: {Value: !Ref PrivateSubnet}
+  AppPublicIp: {Value: !GetAtt AppInstance.PublicIp}
+  ServicesPublicIp: {Value: !GetAtt ServicesInstance.PublicIp}
+  ServicesPrivateIp: {Value: !GetAtt ServicesInstance.PrivateIp}

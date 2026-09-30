@@ -13,6 +13,14 @@ provider "aws" {
   region              = var.region
   profile             = var.aws_profile
   allowed_account_ids = [var.expected_account_id]
+
+  default_tags {
+    tags = {
+      Project     = "SecureShare"
+      ManagedBy   = "Terraform"
+      Environment = var.environment
+    }
+  }
 }
 
 variable "aws_profile" {
@@ -35,9 +43,7 @@ variable "expected_account_id" {
 }
 
 data "aws_caller_identity" "current" {}
-data "aws_vpc" "default" {
-  default = true
-}
+data "aws_availability_zones" "available" { state = "available" }
 
 output "aws_account_id" {
   value = data.aws_caller_identity.current.account_id
@@ -46,6 +52,39 @@ output "aws_account_id" {
 variable "region" {
   type    = string
   default = "us-east-1"
+}
+variable "environment" {
+  description = "Deployment environment used for resource tagging."
+  type        = string
+  default     = "production"
+}
+variable "vpc_cidr" {
+  description = "CIDR range for the dedicated SecureShare VPC."
+  type        = string
+  default     = "10.42.0.0/16"
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr))
+    error_message = "vpc_cidr must be a valid IPv4 CIDR."
+  }
+}
+variable "budget_notification_email" {
+  description = "Email address for AWS Budget alerts. Leave null to skip budget creation."
+  type        = string
+  default     = null
+  nullable    = true
+  validation {
+    condition     = var.budget_notification_email == null ? true : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.budget_notification_email))
+    error_message = "Provide a valid budget notification email address or null."
+  }
+}
+variable "monthly_budget_usd" {
+  description = "Monthly cost budget in USD when budget notifications are enabled."
+  type        = number
+  default     = 5
+  validation {
+    condition     = var.monthly_budget_usd > 0
+    error_message = "monthly_budget_usd must be greater than zero."
+  }
 }
 variable "instance_type" {
   type    = string
@@ -84,9 +123,61 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+resource "aws_vpc" "secureshare" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags                 = { Name = "SecureShare-VPC" }
+}
+
+resource "aws_internet_gateway" "secureshare" {
+  vpc_id = aws_vpc.secureshare.id
+  tags   = { Name = "SecureShare-Internet-Gateway" }
+}
+
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.secureshare.id
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, 1)
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
+  tags                    = { Name = "SecureShare-Public" }
+}
+
+resource "aws_subnet" "private" {
+  vpc_id            = aws_vpc.secureshare.id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 2)
+  availability_zone = data.aws_availability_zones.available.names[0]
+  tags              = { Name = "SecureShare-Private" }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.secureshare.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.secureshare.id
+  }
+  tags = { Name = "SecureShare-Public-Routes" }
+}
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.secureshare.id
+  tags   = { Name = "SecureShare-Private-Routes" }
+}
+
+resource "aws_route_table_association" "private" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
+}
+
 resource "aws_security_group" "secureshare_sg" {
   name_prefix = "secureshare-"
   description = "Public HTTPS with optional restricted SSH; monitoring stays private"
+  vpc_id      = aws_vpc.secureshare.id
 
   ingress {
     from_port   = 80
@@ -114,7 +205,7 @@ resource "aws_security_group" "secureshare_sg" {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.default.cidr_block]
+    cidr_blocks = [aws_vpc.secureshare.cidr_block]
   }
   # Public HTTP is required for Ubuntu package repositories and certificate redirects.
   egress {
@@ -135,13 +226,15 @@ resource "aws_security_group" "secureshare_sg" {
     from_port   = 3310
     to_port     = 3310
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.default.cidr_block]
+    cidr_blocks = [aws_vpc.secureshare.cidr_block]
   }
+  tags = { Name = "SecureShare-App-SG" }
 }
 
 resource "aws_security_group" "services_sg" {
   name_prefix = "secureshare-services-"
   description = "Private scanner and monitoring services"
+  vpc_id      = aws_vpc.secureshare.id
 
   dynamic "ingress" {
     for_each = length(var.ssh_cidrs) > 0 ? [1] : []
@@ -157,7 +250,7 @@ resource "aws_security_group" "services_sg" {
     from_port   = 3310
     to_port     = 3310
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.default.cidr_block]
+    cidr_blocks = [aws_vpc.secureshare.cidr_block]
   }
   # Public HTTPS is needed for package updates, container pulls, and SSM.
   egress {
@@ -178,8 +271,9 @@ resource "aws_security_group" "services_sg" {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.default.cidr_block]
+    cidr_blocks = [aws_vpc.secureshare.cidr_block]
   }
+  tags = { Name = "SecureShare-Services-SG" }
 }
 
 resource "aws_iam_role" "instance" {
@@ -203,11 +297,13 @@ resource "aws_iam_instance_profile" "instance" {
 }
 
 resource "aws_instance" "app_server" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type
-  key_name               = var.ssh_key_name
-  iam_instance_profile   = aws_iam_instance_profile.instance.name
-  vpc_security_group_ids = [aws_security_group.secureshare_sg.id]
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  key_name                    = var.ssh_key_name
+  iam_instance_profile        = aws_iam_instance_profile.instance.name
+  subnet_id                   = aws_subnet.public.id
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.secureshare_sg.id]
 
   metadata_options {
     http_tokens = "required"
@@ -252,11 +348,13 @@ moved {
 }
 
 resource "aws_instance" "services_server" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type
-  key_name               = var.ssh_key_name
-  iam_instance_profile   = aws_iam_instance_profile.instance.name
-  vpc_security_group_ids = [aws_security_group.services_sg.id]
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  key_name                    = var.ssh_key_name
+  iam_instance_profile        = aws_iam_instance_profile.instance.name
+  subnet_id                   = aws_subnet.public.id
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.services_sg.id]
 
   metadata_options {
     http_tokens = "required"
@@ -294,6 +392,36 @@ resource "aws_instance" "services_server" {
     Role    = "services"
   }
 }
+
+resource "aws_budgets_budget" "monthly" {
+  count        = var.budget_notification_email == null ? 0 : 1
+  name         = "SecureShare-Monthly-Cost"
+  budget_type  = "COST"
+  limit_amount = tostring(var.monthly_budget_usd)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  cost_filter {
+    name   = "TagKeyValue"
+    values = ["user:Project$SecureShare"]
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "FORECASTED"
+    subscriber_email_addresses = [var.budget_notification_email]
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = [var.budget_notification_email]
+  }
+}
 output "server_public_ip" {
   value = aws_instance.app_server.public_ip
 }
@@ -308,4 +436,11 @@ output "services_private_ip" {
 }
 output "services_instance_id" {
   value = aws_instance.services_server.id
+}
+output "vpc_id" {
+  value = aws_vpc.secureshare.id
+}
+output "private_subnet_id" {
+  description = "Reserved private subnet for future data services; it intentionally has no internet route."
+  value       = aws_subnet.private.id
 }

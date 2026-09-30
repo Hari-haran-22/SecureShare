@@ -3,6 +3,11 @@
 aws_profile         = "secureshare-new"
 expected_account_id = "REPLACE_WITH_12_DIGIT_ACCOUNT_ID"
 region              = "us-east-1"
+environment         = "production"
+
+# Optional cost alerts. Uncomment with an address that can receive AWS Budget email.
+# budget_notification_email = "owner@example.com"
+# monthly_budget_usd        = 5
 
 # Set these only if Jenkins needs SSH. Create the key pair in the new account.
 # ssh_key_name = "secureshare-deploy"

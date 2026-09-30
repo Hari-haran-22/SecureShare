@@ -2,6 +2,8 @@
 
 SecureShare is a .NET 10 file-sharing application with authenticated encryption, expiring links, password protection, and a private owner dashboard. SQL Server Express stores metadata; encrypted files and key material use persistent Docker volumes.
 
+The supplied project synopsis and its implementation mapping are available under [Project synopsis implementation](docs/synopsis-implementation.md).
+
 ## Features
 
 - Upload files up to 100 MB with a 1–168 hour expiry and 1–100 allowed downloads.
@@ -136,7 +138,7 @@ sudo docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 
 Use a fresh server key volume for Production; development Data Protection keys are not encrypted at rest. Production secrets must be readable by container UID/GID 1654; the Linux initialization script sets that ownership. Keep the wrapping certificate and password for as long as files or backups protected by it are retained.
 
-Terraform defaults to a Free Tier eligible `t3.micro`, a 30 GB encrypted gp3 root volume, IMDSv2, public ports 80/443, and an SSM role. It uses the instance's assigned public IP instead of allocating an Elastic IP. SSH is disabled unless trusted CIDRs and a key pair are configured. Monitoring, SQL, and port 8080 are not opened by Terraform. Remote Terraform state storage is deployment-specific and must be configured before team use.
+Terraform defaults to two Free Tier eligible `t3.micro` instances, encrypted gp3 root volumes, IMDSv2, a dedicated VPC, public and private subnets, and an SSM role. The application and services nodes use assigned public IPs in the public subnet so they can download packages and container images without a billable NAT gateway. Their security groups expose only the required ports; the private subnet has no internet route and is reserved for future data services. SSH is disabled unless trusted CIDRs and a key pair are configured. Monitoring, SQL, and port 8080 are not publicly opened by Terraform. Optional AWS Budget alerts are configured with `budget_notification_email` and `monthly_budget_usd`. Remote Terraform state storage is deployment-specific and must be configured before team use.
 
 Existing installations must back up their current database and upload directory before switching to named volumes. The old Compose configuration had no volumes; new empty volumes cannot automatically recover data from old containers. Restore the old database and files into the new persistent storage before running migrations.
 
@@ -205,4 +207,6 @@ deploy/                HTTPS, scanning, alerts, backup image, and timer configur
 scripts/               Initialization, backup, and deployment scripts
 grafana/               Provisioned dashboards and data source
 teraform/              AWS infrastructure (original directory name retained)
+infrastructure.yaml    Equivalent AWS CloudFormation template
+docs/                  Project synopsis, implementation notes, and AWS account guidance
 ```
