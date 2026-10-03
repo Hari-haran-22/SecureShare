@@ -18,10 +18,13 @@ scrape_configs:
   - job_name: secureshare-api
     static_configs:
       - targets: ['$app_private_ip:8080']
+  - job_name: node-exporter
+    static_configs:
+      - targets: ['node-exporter:9100']
 EOF
 chmod 0644 deploy/prometheus-runtime.yml
 
-"${compose[@]}" pull clamav prometheus alertmanager grafana
+"${compose[@]}" pull clamav prometheus node-exporter alertmanager grafana
 "${compose[@]}" --profile services up -d --no-build --wait --wait-timeout 900 clamav
-"${compose[@]}" --profile services up -d --no-build prometheus alertmanager grafana
+"${compose[@]}" --profile services up -d --no-build prometheus node-exporter alertmanager grafana
 echo 'Scanner and monitoring services are running.'

@@ -21,4 +21,11 @@ $log = Join-Path $logDir 'terraform-destroy.log'
 if ($LASTEXITCODE -ne 0) { throw 'terraform init failed.' }
 & $terraformPath "-chdir=$terraformDir" destroy -auto-approve -input=false 2>&1 | Tee-Object -FilePath $log -Append
 if ($LASTEXITCODE -ne 0) { throw 'terraform destroy failed.' }
+$remaining = @(& $terraformPath "-chdir=$terraformDir" state list 2>&1)
+if ($LASTEXITCODE -ne 0) { throw 'terraform state list failed after destroy.' }
+if ($remaining.Count -gt 0) {
+    $remaining | Tee-Object -FilePath $log -Append
+    throw 'Terraform destroy completed but tracked resources remain in state.'
+}
+"[$(Get-Date -Format o)] Verified that Terraform state contains no managed resources." | Tee-Object -FilePath $log -Append
 "[$(Get-Date -Format o)] Terraform destroy completed." | Tee-Object -FilePath $log -Append

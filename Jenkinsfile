@@ -65,6 +65,8 @@ pipeline {
         stage('Security and infrastructure checks') {
             steps {
                 bat 'docker version --format "Docker server {{.Server.Version}}"'
+                bat 'if not exist security-reports mkdir security-reports'
+                bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v "%WORKSPACE%:/src" -w /src aquasec/trivy:0.67.2 fs --timeout 15m --scanners vuln,secret,misconfig --ignorefile .trivyignore.yaml --format json --output /src/security-reports/source.json --exit-code 0 --skip-dirs .git,SecureShare.API/SecureUploads,secrets,backups .'
                 bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v "%WORKSPACE%:/src" -w /src aquasec/trivy:0.67.2 fs --timeout 15m --scanners vuln,secret,misconfig --ignorefile .trivyignore.yaml --exit-code 1 --severity HIGH,CRITICAL --skip-dirs .git,SecureShare.API/SecureUploads,secrets,backups .'
                 bat '"C:\\Users\\surya\\AppData\\Local\\Microsoft\\WinGet\\Links\\terraform.exe" -chdir=teraform fmt -check'
                 bat 'if not exist "%TF_PLUGIN_CACHE_DIR%" mkdir "%TF_PLUGIN_CACHE_DIR%"'
@@ -77,6 +79,7 @@ pipeline {
         stage('Build and scan image') {
             steps {
                 bat 'docker build --pull -t "%IMAGE_NAME%:%GIT_COMMIT%" .'
+                bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v /var/run/docker.sock:/var/run/docker.sock -v "%WORKSPACE%:/src" aquasec/trivy:0.67.2 image --timeout 15m --format json --output /src/security-reports/image.json --exit-code 0 "%IMAGE_NAME%:%GIT_COMMIT%"'
                 bat 'docker run --rm -v secureshare-trivy-cache:/root/.cache/trivy -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.67.2 image --timeout 15m --exit-code 1 --severity HIGH,CRITICAL "%IMAGE_NAME%:%GIT_COMMIT%"'
             }
         }
@@ -119,6 +122,11 @@ pipeline {
                         '''
                 }
             }
+        }
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'security-reports/*.json', allowEmptyArchive: true
         }
     }
 }

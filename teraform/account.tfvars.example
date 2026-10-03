@@ -9,6 +9,13 @@ environment         = "production"
 # budget_notification_email = "owner@example.com"
 # monthly_budget_usd        = 5
 
+# Optional, destroyable course extensions. The S3 bucket uses force_destroy so
+# terraform destroy removes its objects and versions; copy required backups first.
+# enable_backup_bucket      = true
+# backup_retention_days     = 30
+# enable_health_check_lambda = true
+# health_check_url           = "https://your-domain.example/health/ready"
+
 # Set these only if Jenkins needs SSH. Create the key pair in the new account.
 # ssh_key_name = "secureshare-deploy"
 # ssh_cidrs    = ["YOUR_JENKINS_PUBLIC_IP/32"]

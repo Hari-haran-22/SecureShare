@@ -5,6 +5,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.7"
+    }
   }
   # Configure a private, encrypted remote state backend before team use.
 }
@@ -84,6 +88,37 @@ variable "monthly_budget_usd" {
   validation {
     condition     = var.monthly_budget_usd > 0
     error_message = "monthly_budget_usd must be greater than zero."
+  }
+}
+variable "enable_backup_bucket" {
+  description = "Create the encrypted S3 bucket used for off-host backup demonstrations."
+  type        = bool
+  default     = false
+}
+variable "backup_retention_days" {
+  description = "Days to retain current backup objects before S3 expires them."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.backup_retention_days >= 1
+    error_message = "backup_retention_days must be at least one day."
+  }
+}
+variable "enable_health_check_lambda" {
+  description = "Create a scheduled Lambda and CloudWatch alarm for the public readiness endpoint."
+  type        = bool
+  default     = false
+}
+variable "health_check_url" {
+  description = "HTTPS readiness URL checked by Lambda when enable_health_check_lambda is true."
+  type        = string
+  default     = null
+  nullable    = true
+  validation {
+    condition = !var.enable_health_check_lambda || (
+      var.health_check_url != null && can(regex("^https://", var.health_check_url))
+    )
+    error_message = "health_check_url must be an HTTPS URL when the Lambda health check is enabled."
   }
 }
 variable "instance_type" {
@@ -296,6 +331,70 @@ resource "aws_iam_instance_profile" "instance" {
   role        = aws_iam_role.instance.name
 }
 
+resource "aws_s3_bucket" "backups" {
+  count         = var.enable_backup_bucket ? 1 : 0
+  bucket        = "secureshare-backups-${data.aws_caller_identity.current.account_id}-${var.region}"
+  force_destroy = true
+  tags          = { Name = "SecureShare-Encrypted-Backups" }
+}
+
+resource "aws_s3_bucket_public_access_block" "backups" {
+  count                   = var.enable_backup_bucket ? 1 : 0
+  bucket                  = aws_s3_bucket.backups[0].id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "backups" {
+  count  = var.enable_backup_bucket ? 1 : 0
+  bucket = aws_s3_bucket.backups[0].id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
+  count  = var.enable_backup_bucket ? 1 : 0
+  bucket = aws_s3_bucket.backups[0].id
+  rule {
+    apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "backups" {
+  count      = var.enable_backup_bucket ? 1 : 0
+  bucket     = aws_s3_bucket.backups[0].id
+  depends_on = [aws_s3_bucket_versioning.backups]
+  rule {
+    id     = "expire-course-backups"
+    status = "Enabled"
+    filter {}
+    expiration { days = var.backup_retention_days }
+    noncurrent_version_expiration { noncurrent_days = 1 }
+  }
+}
+
+resource "aws_iam_role_policy" "backup_bucket" {
+  count = var.enable_backup_bucket ? 1 : 0
+  name  = "secureshare-backup-bucket"
+  role  = aws_iam_role.instance.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.backups[0].arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload"]
+        Resource = "${aws_s3_bucket.backups[0].arn}/*"
+      }
+    ]
+  })
+}
+
 resource "aws_instance" "app_server" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
@@ -393,6 +492,99 @@ resource "aws_instance" "services_server" {
   }
 }
 
+data "archive_file" "health_check" {
+  count       = var.enable_health_check_lambda ? 1 : 0
+  type        = "zip"
+  source_file = "${path.module}/lambda/health_check.py"
+  output_path = "${path.module}/.terraform/health-check.zip"
+}
+
+resource "aws_iam_role" "health_check" {
+  count       = var.enable_health_check_lambda ? 1 : 0
+  name_prefix = "secureshare-health-check-"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "health_check_logs" {
+  count = var.enable_health_check_lambda ? 1 : 0
+  name  = "cloudwatch-logs"
+  role  = aws_iam_role.health_check[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource = "${aws_cloudwatch_log_group.health_check[0].arn}:*"
+    }]
+  })
+}
+
+resource "aws_cloudwatch_log_group" "health_check" {
+  count             = var.enable_health_check_lambda ? 1 : 0
+  name              = "/aws/lambda/secureshare-health-check"
+  retention_in_days = 7
+}
+
+resource "aws_lambda_function" "health_check" {
+  count            = var.enable_health_check_lambda ? 1 : 0
+  function_name    = "secureshare-health-check"
+  role             = aws_iam_role.health_check[0].arn
+  runtime          = "python3.13"
+  handler          = "health_check.handler"
+  filename         = data.archive_file.health_check[0].output_path
+  source_code_hash = data.archive_file.health_check[0].output_base64sha256
+  timeout          = 15
+  memory_size      = 128
+  environment {
+    variables = { HEALTH_CHECK_URL = var.health_check_url }
+  }
+  depends_on = [aws_iam_role_policy.health_check_logs]
+}
+
+resource "aws_cloudwatch_event_rule" "health_check" {
+  count               = var.enable_health_check_lambda ? 1 : 0
+  name                = "secureshare-health-check"
+  description         = "Runs the SecureShare readiness check every five minutes"
+  schedule_expression = "rate(5 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "health_check" {
+  count = var.enable_health_check_lambda ? 1 : 0
+  rule  = aws_cloudwatch_event_rule.health_check[0].name
+  arn   = aws_lambda_function.health_check[0].arn
+}
+
+resource "aws_lambda_permission" "eventbridge" {
+  count         = var.enable_health_check_lambda ? 1 : 0
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.health_check[0].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.health_check[0].arn
+}
+
+resource "aws_cloudwatch_metric_alarm" "health_check_errors" {
+  count               = var.enable_health_check_lambda ? 1 : 0
+  alarm_name          = "SecureShare-HealthCheck-Errors"
+  alarm_description   = "The scheduled SecureShare health check failed."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.health_check[0].function_name }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+}
+
 resource "aws_budgets_budget" "monthly" {
   count        = var.budget_notification_email == null ? 0 : 1
   name         = "SecureShare-Monthly-Cost"
@@ -443,4 +635,12 @@ output "vpc_id" {
 output "private_subnet_id" {
   description = "Reserved private subnet for future data services; it intentionally has no internet route."
   value       = aws_subnet.private.id
+}
+output "backup_bucket_name" {
+  description = "Managed backup bucket, or null when the optional course extension is disabled."
+  value       = try(aws_s3_bucket.backups[0].id, null)
+}
+output "health_check_function_name" {
+  description = "Scheduled Lambda name, or null when the optional course extension is disabled."
+  value       = try(aws_lambda_function.health_check[0].function_name, null)
 }

@@ -15,7 +15,7 @@ The supplied project synopsis and its implementation mapping are available under
 - ClamAV scanning in Docker; scanner outages reject uploads.
 - Server-side input validation, CSRF protection, IP rate limiting, and storage quotas.
 - Cleanup removes unavailable file data and keys every 60 seconds; orphan reconciliation runs after 24 hours.
-- Health endpoints, Prometheus metrics, Grafana, and Alertmanager.
+- Health endpoints, Prometheus application metrics, Node Exporter host metrics, Grafana, and Alertmanager.
 - Verified, encrypted backups and a CI pipeline with tests, security scans, readiness verification, and application-image rollback.
 
 A recovery code is a private management credential. Anyone with the code can manage that owner's files. Anyone with a share link can inspect its file metadata and download it unless a file password is required. There is no email account system or recipient identity verification.
@@ -138,7 +138,7 @@ sudo docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 
 Use a fresh server key volume for Production; development Data Protection keys are not encrypted at rest. Production secrets must be readable by container UID/GID 1654; the Linux initialization script sets that ownership. Keep the wrapping certificate and password for as long as files or backups protected by it are retained.
 
-Terraform defaults to two Free Tier eligible `t3.micro` instances, encrypted gp3 root volumes, IMDSv2, a dedicated VPC, public and private subnets, and an SSM role. The application and services nodes use assigned public IPs in the public subnet so they can download packages and container images without a billable NAT gateway. Their security groups expose only the required ports; the private subnet has no internet route and is reserved for future data services. SSH is disabled unless trusted CIDRs and a key pair are configured. Monitoring, SQL, and port 8080 are not publicly opened by Terraform. Optional AWS Budget alerts are configured with `budget_notification_email` and `monthly_budget_usd`. Remote Terraform state storage is deployment-specific and must be configured before team use.
+Terraform defaults to two Free Tier eligible `t3.micro` instances, encrypted gp3 root volumes, IMDSv2, a dedicated VPC, public and private subnets, and an SSM role. The application and services nodes use assigned public IPs in the public subnet so they can download packages and container images without a billable NAT gateway. Their security groups expose only the required ports; the private subnet has no internet route and is reserved for future data services. SSH is disabled unless trusted CIDRs and a key pair are configured. Monitoring, SQL, and port 8080 are not publicly opened by Terraform. Optional AWS Budget alerts are configured with `budget_notification_email` and `monthly_budget_usd`. Optional, Terraform-managed course extensions provide an encrypted S3 backup bucket and a scheduled Lambda/CloudWatch readiness check; both remain disabled until explicitly selected. Remote Terraform state storage is deployment-specific and must be configured before team use.
 
 Existing installations must back up their current database and upload directory before switching to named volumes. The old Compose configuration had no volumes; new empty volumes cannot automatically recover data from old containers. Restore the old database and files into the new persistent storage before running migrations.
 
@@ -193,7 +193,7 @@ Do not remove persistent volumes during updates. Keep secrets and off-server bac
 
 ## Monitoring
 
-Prometheus scrapes `/metrics`; Caddy blocks that route publicly. Grafana provisions the included runtime dashboard and a SecureShare dashboard. Alert rules cover API availability, HTTP server errors, storage usage, and stalled cleanup.
+Prometheus scrapes `/metrics` and Node Exporter; Caddy blocks application metrics publicly. Grafana provisions the included runtime, SecureShare and host-infrastructure dashboards. Alert rules cover API availability, HTTP server errors, storage usage, stalled cleanup, host CPU, memory, disk and Node Exporter availability.
 
 Alerts are visible in the local Alertmanager UI. Configure an external receiver in `deploy/alertmanager.yml` for email or webhook delivery; no messages are sent by the default configuration.
 
@@ -210,3 +210,5 @@ teraform/              AWS infrastructure (original directory name retained)
 infrastructure.yaml    Equivalent AWS CloudFormation template
 docs/                  Project synopsis, implementation notes, and AWS account guidance
 ```
+
+The course mapping and destruction boundary are documented in [INT378 course outcomes](docs/course-outcomes-mapping.md) and [AWS resource lifecycle](docs/aws-resource-lifecycle.md).
