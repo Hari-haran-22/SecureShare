@@ -23,28 +23,44 @@ pipeline {
         stage('Checkout') {
             steps {
                 deleteDir()
-                bat 'git clone --depth 1 --branch master https://github.com/Hari-haran-22/SecureShare.git .'
+                checkout scm
                 script {
                     env.GIT_COMMIT = bat(script: '@git rev-parse HEAD', returnStdout: true).trim()
                 }
             }
         }
-        stage('Validate inputs') {
+        stage('Resolve and validate inputs') {
             steps {
                 script {
+                    def targetFile = 'C:\\ProgramData\\Jenkins\\.jenkins\\secureshare-deployment.env'
+                    def savedTargets = [:]
+                    if (fileExists(targetFile)) {
+                        readFile(file: targetFile).split(/\r?\n/).each { line ->
+                            def separator = line.indexOf('=')
+                            if (separator > 0) {
+                                savedTargets[line.substring(0, separator).trim()] = line.substring(separator + 1).trim()
+                            }
+                        }
+                    }
+
+                    env.DEPLOY_HOST = params.DEPLOY_HOST.trim() ?: (savedTargets.DEPLOY_HOST ?: '')
+                    env.APP_PRIVATE_IP = params.APP_PRIVATE_IP.trim() ?: (savedTargets.APP_PRIVATE_IP ?: '')
+                    env.SERVICES_HOST = params.SERVICES_HOST.trim() ?: (savedTargets.SERVICES_HOST ?: '')
+                    env.SCANNER_PRIVATE_IP = params.SCANNER_PRIVATE_IP.trim() ?: (savedTargets.SCANNER_PRIVATE_IP ?: '')
+
                     def deployValues = [
-                        params.DEPLOY_HOST.trim(),
-                        params.APP_PRIVATE_IP.trim(),
-                        params.SERVICES_HOST.trim(),
-                        params.SCANNER_PRIVATE_IP.trim()
+                        env.DEPLOY_HOST,
+                        env.APP_PRIVATE_IP,
+                        env.SERVICES_HOST,
+                        env.SCANNER_PRIVATE_IP
                     ]
                     def deployRequested = deployValues.any { it != '' }
 
                     if (!(params.IMAGE_NAME ==~ /[a-z0-9][a-z0-9._\/-]+/) ||
-                        !(params.DEPLOY_HOST ==~ /[a-zA-Z0-9.-]*/) ||
-                        !(params.APP_PRIVATE_IP ==~ /([0-9]{1,3}(\.[0-9]{1,3}){3})?/) ||
-                        !(params.SERVICES_HOST ==~ /[a-zA-Z0-9.-]*/) ||
-                        !(params.SCANNER_PRIVATE_IP ==~ /([0-9]{1,3}(\.[0-9]{1,3}){3})?/) ||
+                        !(env.DEPLOY_HOST ==~ /[a-zA-Z0-9.-]*/) ||
+                        !(env.APP_PRIVATE_IP ==~ /([0-9]{1,3}(\.[0-9]{1,3}){3})?/) ||
+                        !(env.SERVICES_HOST ==~ /[a-zA-Z0-9.-]*/) ||
+                        !(env.SCANNER_PRIVATE_IP ==~ /([0-9]{1,3}(\.[0-9]{1,3}){3})?/) ||
                         !(params.SSH_CREDENTIAL_ID ==~ /[a-zA-Z0-9_.-]+/)) {
                         error('Invalid image or deployment address')
                     }
@@ -98,10 +114,10 @@ pipeline {
         stage('Deploy and verify') {
             when {
                 expression {
-                    params.DEPLOY_HOST.trim() != '' &&
-                    params.APP_PRIVATE_IP.trim() != '' &&
-                    params.SERVICES_HOST.trim() != '' &&
-                    params.SCANNER_PRIVATE_IP.trim() != ''
+                    env.DEPLOY_HOST != '' &&
+                    env.APP_PRIVATE_IP != '' &&
+                    env.SERVICES_HOST != '' &&
+                    env.SCANNER_PRIVATE_IP != ''
                 }
             }
             steps {

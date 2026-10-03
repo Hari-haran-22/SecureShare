@@ -23,5 +23,19 @@ if ($LASTEXITCODE -ne 0) { throw 'terraform init failed.' }
 & $terraformPath "-chdir=$terraformDir" apply -auto-approve -input=false
 if ($LASTEXITCODE -ne 0) { throw 'terraform apply failed; the scheduled destroy remains active for cleanup.' }
 
+$outputs = & $terraformPath "-chdir=$terraformDir" output -json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'terraform output failed after apply.' }
+$jenkinsHome = 'C:\ProgramData\Jenkins\.jenkins'
+if (Test-Path $jenkinsHome) {
+    $targetFile = Join-Path $jenkinsHome 'secureshare-deployment.env'
+    @(
+        "DEPLOY_HOST=$($outputs.server_public_ip.value)"
+        "APP_PRIVATE_IP=$($outputs.server_private_ip.value)"
+        "SERVICES_HOST=$($outputs.services_public_ip.value)"
+        "SCANNER_PRIVATE_IP=$($outputs.services_private_ip.value)"
+    ) | Set-Content -Path $targetFile -Encoding ascii
+    Write-Output "Saved the current Terraform deployment addresses for Jenkins at $targetFile."
+}
+
 Write-Output "Environment is ready and will be destroyed no later than $($destroyAt.ToString('yyyy-MM-dd HH:mm:ss zzz'))."
 & $terraformPath "-chdir=$terraformDir" output

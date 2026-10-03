@@ -29,3 +29,5 @@ terraform -chdir=teraform state list
 An empty state confirms that Terraform removed everything it tracked. It does not cover resources created manually or through the separate CloudFormation template. Check AWS Resource Explorer and Cost Explorer for resources outside this state.
 
 CloudFormation exercises must be removed by deleting their CloudFormation stack. Jenkins, Docker, Grafana, Prometheus, Node Exporter and ngrok are local services and are outside `terraform destroy`.
+
+`Start-EphemeralAwsEnvironment.ps1` writes the Terraform instance addresses to `C:\ProgramData\Jenkins\.jenkins\secureshare-deployment.env`. This lets GitHub webhook builds deploy without entering the four changing IP addresses by hand. The destroy script removes the file only after Terraform reports an empty state.

@@ -27,5 +27,10 @@ if ($remaining.Count -gt 0) {
     $remaining | Tee-Object -FilePath $log -Append
     throw 'Terraform destroy completed but tracked resources remain in state.'
 }
+$targetFile = 'C:\ProgramData\Jenkins\.jenkins\secureshare-deployment.env'
+if (Test-Path $targetFile) {
+    Remove-Item -LiteralPath $targetFile -Force
+    "[$(Get-Date -Format o)] Removed the obsolete Jenkins deployment target file." | Tee-Object -FilePath $log -Append
+}
 "[$(Get-Date -Format o)] Verified that Terraform state contains no managed resources." | Tee-Object -FilePath $log -Append
 "[$(Get-Date -Format o)] Terraform destroy completed." | Tee-Object -FilePath $log -Append
