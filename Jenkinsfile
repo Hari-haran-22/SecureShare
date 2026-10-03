@@ -6,7 +6,18 @@ pipeline {
         timestamps()
         timeout(time: 90, unit: 'MINUTES')
     }
-    triggers { githubPush() }
+    triggers {
+        GenericTrigger(
+            genericVariables: [[key: 'ref', value: '$.ref']],
+            causeString: 'GitHub push to $ref',
+            tokenCredentialId: 'secureshare-webhook-token',
+            printContributedVariables: false,
+            printPostContent: false,
+            silentResponse: true,
+            regexpFilterText: '$ref',
+            regexpFilterExpression: '^refs/heads/master$'
+        )
+    }
     environment {
         DOCKER_HOST = 'tcp://127.0.0.1:2375'
         TF_PLUGIN_CACHE_DIR = 'C:\\ProgramData\\Jenkins\\.jenkins\\terraform-plugin-cache'
