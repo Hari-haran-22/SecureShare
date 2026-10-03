@@ -1,0 +1,9 @@
+#!/bin/sh
+
+branch=$(git symbolic-ref --quiet --short HEAD) || exit 0
+if [ "$branch" != "master" ]; then
+    exit 0
+fi
+
+echo "Automatically pushing master to origin..."
+git push origin master
