@@ -123,6 +123,9 @@ services:
   backup:
     image: secureshare-backup:local
     build: ./deploy/backup
+    # The snapshot spans volumes owned by the API, SQL Server and root. The
+    # image defaults to non-root; only this short-lived tool job is elevated.
+    user: "0:0"
     profiles: [tools]
     volumes:
       - uploads:/data/uploads:ro
