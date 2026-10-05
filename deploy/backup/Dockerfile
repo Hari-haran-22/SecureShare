@@ -1,7 +1,7 @@
 FROM alpine:3.22
-RUN apk add --no-cache gnupg \
-    && addgroup -g 1654 secureshare \
-    && adduser -D -u 1000 -G secureshare backup
-USER backup
+# The short-lived backup job must read volumes owned by both the application
+# UID (1654) and SQL Server UID (10001), plus root-owned wrapping secrets.
+# Source mounts are read-only and this image is never used as a network service.
+RUN apk add --no-cache gnupg
 ENTRYPOINT ["/bin/sh", "-c"]
 
