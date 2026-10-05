@@ -22,6 +22,14 @@ else
     "${compose[@]}" exec -T db bash -c 'SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q "BACKUP DATABASE [SecureShareDb] TO DISK = '\''/var/opt/mssql/backups/secureshare.bak'\'' WITH INIT, CHECKSUM; RESTORE VERIFYONLY FROM DISK = '\''/var/opt/mssql/backups/secureshare.bak'\'' WITH CHECKSUM;"'
 fi
 "${compose[@]}" --profile tools run --rm --no-deps backup
+# The production backup job runs as root so it can read volumes owned by the
+# API, SQL Server and root. Return only the encrypted output directory to the
+# invoking operator before optional S3 sync and retention cleanup.
+if [[ "$(id -u)" -eq 0 ]]; then
+    chown -R "$(id -u):$(id -g)" backups
+else
+    sudo chown -R "$(id -u):$(id -g)" backups
+fi
 if [[ -n "${BACKUP_S3_URI:-}" ]]; then
     aws s3 sync backups/ "$BACKUP_S3_URI" --exclude '*' --include 'secureshare-*.tar.gz.gpg' --only-show-errors
 fi
