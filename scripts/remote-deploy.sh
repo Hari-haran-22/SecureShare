@@ -18,10 +18,14 @@ if [[ "$role" == services && ! -f .env ]]; then
 fi
 if [[ "$role" == app ]]; then
     [[ "$public_host" =~ ^[a-zA-Z0-9.-]+$ ]] || { echo 'A valid public app hostname is required.'; exit 2; }
-    if [[ ! -e .env && ! -e secrets/protection.pfx ]]; then
+    # Production certificates are intentionally owned by root and the
+    # container runtime group. Check them through sudo because the deployment
+    # user cannot traverse the locked-down secrets directory after the first
+    # successful initialization.
+    if [[ ! -e .env ]] && ! sudo test -e secrets/protection.pfx; then
         sudo bash scripts/initialize.sh "${public_host}.nip.io"
         sudo chown "$(id -u):$(id -g)" .env
-    elif [[ ! -f .env || ! -f secrets/protection.pfx ]]; then
+    elif [[ ! -f .env ]] || ! sudo test -f secrets/protection.pfx; then
         echo 'Incomplete application secrets; restore both .env and secrets/protection.pfx.'
         exit 1
     fi
