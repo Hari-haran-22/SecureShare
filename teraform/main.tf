@@ -137,6 +137,15 @@ variable "ssh_cidrs" {
     error_message = "SSH requires explicit trusted IPv4 CIDRs; public SSH is forbidden."
   }
 }
+variable "ssh_port" {
+  description = "Public SSH port used by Jenkins for deployments."
+  type        = number
+  default     = 2222
+  validation {
+    condition     = var.ssh_port >= 1 && var.ssh_port <= 65535
+    error_message = "ssh_port must be a valid TCP port between 1 and 65535."
+  }
+}
 
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -229,8 +238,8 @@ resource "aws_security_group" "secureshare_sg" {
   dynamic "ingress" {
     for_each = length(var.ssh_cidrs) > 0 ? [1] : []
     content {
-      from_port   = 22
-      to_port     = 22
+      from_port   = var.ssh_port
+      to_port     = var.ssh_port
       protocol    = "tcp"
       cidr_blocks = var.ssh_cidrs
     }
@@ -274,8 +283,8 @@ resource "aws_security_group" "services_sg" {
   dynamic "ingress" {
     for_each = length(var.ssh_cidrs) > 0 ? [1] : []
     content {
-      from_port   = 22
-      to_port     = 22
+      from_port   = var.ssh_port
+      to_port     = var.ssh_port
       protocol    = "tcp"
       cidr_blocks = var.ssh_cidrs
     }

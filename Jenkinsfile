@@ -20,6 +20,7 @@ pipeline {
     }
     environment {
         DOCKER_HOST = 'tcp://127.0.0.1:2375'
+        SSH_PORT = '2222'
         TF_PLUGIN_CACHE_DIR = 'C:\\ProgramData\\Jenkins\\.jenkins\\terraform-plugin-cache'
     }
     parameters {
@@ -140,10 +141,10 @@ pipeline {
                         bat '''
                             @echo off
                             for /f "tokens=*" %%i in ('whoami') do icacls "%SSH_KEY%" /inheritance:r /grant "%%i:R"
-                            ssh -i "%SSH_KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ^
+                            ssh -p "%SSH_PORT%" -i "%SSH_KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ^
                                 -o UserKnownHostsFile="%WORKSPACE%\\deploy\\known_hosts" "%SSH_USERNAME%@%SERVICES_HOST%" ^
                                 bash -s -- "%GIT_COMMIT%" "%IMAGE_NAME%:%GIT_COMMIT%" services "%APP_PRIVATE_IP%" < scripts\\remote-deploy.sh
-                            ssh -i "%SSH_KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ^
+                            ssh -p "%SSH_PORT%" -i "%SSH_KEY%" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ^
                                 -o UserKnownHostsFile="%WORKSPACE%\\deploy\\known_hosts" "%SSH_USERNAME%@%DEPLOY_HOST%" ^
                                 bash -s -- "%GIT_COMMIT%" "%IMAGE_NAME%:%GIT_COMMIT%" app "%SCANNER_PRIVATE_IP%" "%DEPLOY_HOST%" < scripts\\remote-deploy.sh
                         '''
