@@ -1,8 +1,37 @@
 # SecureShare
 
-SecureShare is a .NET 10 file-sharing application with authenticated encryption, expiring links, password protection, and a private owner dashboard. SQL Server Express stores metadata; encrypted files and key material use persistent Docker volumes.
+SecureShare is a .NET 10 file-sharing application with authenticated encryption, expiring links, password protection, and a private owner dashboard. SQL Server Express stores metadata in the full local stack, while the current production profile uses SQLite; encrypted files and key material use persistent Docker volumes.
 
 The supplied project synopsis and its implementation mapping are available under [Project synopsis implementation](docs/synopsis-implementation.md).
+
+This repository is also a complete DevSecOps course project: a push to GitHub triggers Jenkins through a webhook, the pipeline tests and scans the revision, publishes an immutable commit-tagged image, and deploys it to Terraform-managed AWS infrastructure. Prometheus, Grafana, Node Exporter, and Alertmanager provide operational visibility, while verified encrypted backups and an audited Terraform destroy workflow cover recovery and cost control.
+
+> **Verified implementation:** Jenkins build **#107** successfully deployed commit `282333bf1f6bc46a92d31e2e0bd1959c7eb5babd`. The run passed 24 tests, Entity Framework migration validation, Trivy source and image gates, Terraform validation, Docker Hub publication, encrypted backup creation, production migration, container health checks, and the public readiness check.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Developer[Developer] -->|push to master| GitHub[GitHub]
+    GitHub -->|webhook through ngrok| Jenkins[Jenkins on Windows]
+    Jenkins -->|test and scan| Registry[Docker Hub\ncommit-tagged image]
+    Jenkins -->|SSH port 2222| AppNode[Application EC2]
+    Jenkins -->|SSH port 2222| ServicesNode[Services EC2]
+    Browser[Browser] -->|HTTPS 443| Caddy[Caddy]
+    Caddy --> API[SecureShare API]
+    API --> Data[(Encrypted files + SQLite)]
+    API -->|private VPC port 3310| ClamAV[ClamAV]
+    Prometheus -->|private VPC /metrics| API
+    Prometheus --> NodeExporter[Node Exporter]
+    Grafana --> Prometheus
+    Prometheus --> Alertmanager
+    ServicesNode --- ClamAV
+    ServicesNode --- Prometheus
+    ServicesNode --- Grafana
+    ServicesNode --- Alertmanager
+```
+
+Terraform creates a dedicated VPC, public and private subnets, routing, security groups, two Ubuntu EC2 instances, encrypted gp3 root disks, and an IAM instance profile for Systems Manager. The application node runs the API and Caddy. The services node runs malware scanning and monitoring so those workloads do not compete with the API. The current design intentionally uses one writable API instance because encrypted uploads and the production SQLite database are stored in local Docker volumes.
 
 ## Features
 
@@ -122,6 +151,31 @@ Startup migration upgrades active legacy AES-CBC files to authenticated GCM with
 
 To replace an unavailable AWS account, follow [Switch AWS accounts](docs/aws-account-switch.md). Terraform requires the intended 12-digit `expected_account_id`; use `scripts/Use-AwsAccount.ps1` to verify and save a named profile for this project.
 
+The configured deployment uses AWS account `593602867169`, region `eu-north-1`, and local AWS CLI profile `hariharan`. Verify the identity without placing access keys in this repository:
+
+```powershell
+./scripts/Use-AwsAccount.ps1 -ProfileName hariharan -ExpectedAccountId 593602867169
+```
+
+Review the infrastructure before creation:
+
+```powershell
+terraform -chdir=teraform init
+terraform -chdir=teraform fmt -check
+terraform -chdir=teraform validate
+terraform -chdir=teraform plan
+terraform -chdir=teraform apply
+terraform -chdir=teraform output
+```
+
+For a temporary course demonstration, prefer the lifecycle wrapper:
+
+```powershell
+./scripts/Start-EphemeralAwsEnvironment.ps1 -MaxLifetime 04:00:00
+```
+
+It schedules cleanup before `terraform apply`, so a partial apply is still covered, and then saves the resulting addresses for Jenkins. `MaxLifetime` must be between 15 minutes and 5 hours. The default instance type is `t3.micro`; Free Tier eligibility depends on the account and current AWS offer, so this setting does not guarantee zero cost.
+
 The production Compose override adds Caddy with automatic HTTPS, removes the API's host port, and trusts only the configured Caddy proxy address for forwarded headers. Monitoring stays on localhost; access it through SSH tunnels or AWS Session Manager.
 
 1. Provision infrastructure using `teraform/main.tf`. Run `terraform plan` and review it before applying.
@@ -138,21 +192,79 @@ sudo docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 
 Use a fresh server key volume for Production; development Data Protection keys are not encrypted at rest. Production secrets must be readable by container UID/GID 1654; the Linux initialization script sets that ownership. Keep the wrapping certificate and password for as long as files or backups protected by it are retained.
 
-Terraform defaults to two Free Tier eligible `t3.micro` instances, encrypted gp3 root volumes, IMDSv2, a dedicated VPC, public and private subnets, and an SSM role. The application and services nodes use assigned public IPs in the public subnet so they can download packages and container images without a billable NAT gateway. Their security groups expose only the required ports; the private subnet has no internet route and is reserved for future data services. SSH is disabled unless trusted CIDRs and a key pair are configured. Monitoring, SQL, and port 8080 are not publicly opened by Terraform. Optional AWS Budget alerts are configured with `budget_notification_email` and `monthly_budget_usd`. Optional, Terraform-managed course extensions provide an encrypted S3 backup bucket and a scheduled Lambda/CloudWatch readiness check; both remain disabled until explicitly selected. Remote Terraform state storage is deployment-specific and must be configured before team use.
+Terraform defaults to two Free Tier-sized `t3.micro` instances, encrypted gp3 root volumes, IMDSv2, a dedicated VPC, public and private subnets, and an SSM role. The application and services nodes use assigned public IPs in the public subnet so they can download packages and container images without a billable NAT gateway. Their security groups expose only the required ports; the private subnet has no internet route and is reserved for future data services. SSH is disabled unless trusted CIDRs and a key pair are configured. Monitoring, SQL, and port 8080 are not publicly opened by Terraform. Optional AWS Budget alerts are configured with `budget_notification_email` and `monthly_budget_usd`. Optional, Terraform-managed course extensions provide an encrypted S3 backup bucket and a scheduled Lambda/CloudWatch readiness check; both remain disabled until explicitly selected. Remote Terraform state storage is deployment-specific and must be configured before team use.
+
+Terraform manages the VPC, internet gateway, subnets, route tables, security groups, two EC2 instances, encrypted root disks, IAM role and instance profile, project tags, and any enabled budget/S3/Lambda/CloudWatch/EventBridge extensions. Resources created manually or from the separate CloudFormation comparison template are outside this Terraform state.
 
 Existing installations must back up their current database and upload directory before switching to named volumes. The old Compose configuration had no volumes; new empty volumes cannot automatically recover data from old containers. Restore the old database and files into the new persistent storage before running migrations.
 
 ## CI/CD
 
-Jenkins requires a Linux agent labelled `linux-docker-dotnet` with Docker, .NET 10, EF CLI 10, Terraform, and Trivy. Required plugins include Credentials Binding and SSH Credentials; both are installed on the inspected Jenkins instance.
+### Trigger and delivery flow
 
-Credentials: `docker-hub-id`, `aws-ssh-key-id`, and a file credential `aws-known-hosts` containing independently verified server host keys. The pipeline reads the deployment username from `aws-ssh-key-id`. That user needs permission to operate Docker and update `/opt/secureshare`.
+```text
+Push to master
+  -> GitHub sends the webhook payload
+  -> ngrok forwards it to local Jenkins
+  -> Generic Webhook Trigger accepts refs/heads/master
+  -> Jenkins checks out the exact revision
+  -> restore, test, scan, package, publish, back up, migrate, deploy, verify
+```
+
+The pipeline is automatic for pushes to `master`. Other branches are deliberately filtered by `^refs/heads/master$`. Jenkins disables concurrent runs and applies a 90-minute build timeout.
+
+Start the configured Jenkins tunnel when webhook delivery is required:
+
+```powershell
+./scripts/Start-JenkinsNgrok.ps1
+```
+
+If ngrok assigns a new public URL, update the GitHub webhook payload URL. Stop ngrok after the demonstration when inbound webhook access is no longer needed.
+
+### Jenkins requirements
+
+The current Jenkins controller/agent runs on Windows. It requires Git, Docker Desktop, .NET 10, EF CLI 10, Terraform, OpenSSH, and the Generic Webhook Trigger, Credentials Binding, and SSH Credentials plugins. This local installation exposes Docker Engine to Jenkins at `tcp://127.0.0.1:2375`; Docker Desktop must be running before a build starts.
+
+| Jenkins credential | Type | Purpose |
+| --- | --- | --- |
+| `docker-hub-id` | Username with password | Push the commit-tagged image to Docker Hub |
+| `aws-ssh-key-id` | SSH username with private key | Deploy to both EC2 nodes as `ubuntu` |
+| `secureshare-webhook-token` | Secret text | Authenticate the Generic Webhook Trigger endpoint |
 
 For AWS account `593602867169`, Jenkins credential `aws-ssh-key-id` is an **SSH Username with private key** credential for user `ubuntu`. `DEPLOY_HOST` defaults to the Terraform-managed server, and `deploy/known_hosts` pins that server's SSH host key. The private key stays in Jenkins. This SSH credential cannot run AWS API or Terraform commands; local AWS profile `hariharan` is used for Terraform commands run on this computer. See [AWS account switch](docs/aws-account-switch.md).
 
 The GitHub push webhook starts the pipeline automatically. Jenkins uses its tracked SCM checkout so each built revision becomes the baseline for the next webhook. `Start-EphemeralAwsEnvironment.ps1` saves the current Terraform public and private addresses in the local Jenkins home; webhook builds use those addresses when build parameters are blank. `Destroy-AwsEnvironment.ps1` removes that target file after a verified destroy, so later pushes run CI checks without trying to deploy to deleted hosts.
 
-The pipeline restores locked packages, runs tests, checks migration completeness, scans source/configuration and the image, and pushes a commit-tagged image. Deployment uses the pinned host key, a verified backup, explicit migrations, and container readiness checks. Supplying build parameters overrides the locally saved Terraform target.
+### Pipeline stages and quality gates
+
+| Stage | Work performed | Gate |
+| --- | --- | --- |
+| Checkout | Delete the old workspace and check out the webhook revision | SCM failure stops the run |
+| Resolve inputs | Read build parameters or Terraform-generated addresses and validate them | Partial or malformed deployment targets are rejected |
+| Restore, build and test | Locked restore, Release tests, EF pending-model-change check | Dependency, test, build, or model drift stops the run |
+| Security and infrastructure | Trivy filesystem vulnerability/secret/misconfiguration scan; Terraform format/init/validate | HIGH or CRITICAL findings and invalid IaC stop the run |
+| Build and scan image | Build the Docker image and run the Trivy image scan | Unsafe images are not published |
+| Push image | Authenticate to Docker Hub and push the full Git SHA tag | Only an immutable revision proceeds to deployment |
+| Deploy and verify | Deploy services, back up the app, migrate, start containers, and verify readiness | SSH, backup, migration, health, or readiness failure stops the run |
+
+Jenkins archives TRX test results and JSON Trivy reports as evaluation evidence. Deployment uses the pinned host key, a verified encrypted backup, explicit migrations, and container readiness checks. Supplying all four address parameters overrides the locally saved Terraform target.
+
+The services node is deployed first so ClamAV is ready before the application is tested. The app deployment checks out the exact commit, pulls the exact image tag, creates a backup, runs the migration, starts Caddy and the API, and waits for the readiness endpoint.
+
+### Dynamic AWS addresses and `nip.io`
+
+Terraform-created public IP addresses can change after destroy/apply. `Start-EphemeralAwsEnvironment.ps1` writes the current public and private addresses to `C:\ProgramData\Jenkins\.jenkins\secureshare-deployment.env`; webhook builds read this file when build parameters are blank. No IP address needs to be committed to the `Jenkinsfile`.
+
+The production URL uses `https://<application-public-ip>.nip.io/`. `nip.io` resolves the IP embedded in the hostname, which lets Caddy obtain a standard HTTPS certificate without purchasing a domain. The URL changes when Terraform creates an instance with a different public IP.
+
+Verify the deployed service with:
+
+```powershell
+curl.exe -f https://<application-public-ip>.nip.io/health/ready
+ssh -p 2222 -i <private-key> ubuntu@<application-public-ip> "cd /opt/secureshare && docker compose ps"
+```
+
+The expected result is HTTP 200 and healthy API and Caddy containers.
 
 Updates use a brief maintenance window. On failure, a previous image advertising encryption format 2 can be restored. The original application cannot read protected keys or GCM files; rollback across the first upgrade requires restoring the pre-upgrade database and file archive together. Database migrations are not automatically reversed. The included schema migration is additive, while legacy encryption conversion changes stored data.
 
@@ -198,6 +310,91 @@ Do not remove persistent volumes during updates. Keep secrets and off-server bac
 Prometheus scrapes `/metrics` and Node Exporter; Caddy blocks application metrics publicly. Grafana provisions the included runtime, SecureShare and host-infrastructure dashboards. Alert rules cover API availability, HTTP server errors, storage usage, stalled cleanup, host CPU, memory, disk and Node Exporter availability.
 
 Alerts are visible in the local Alertmanager UI. Configure an external receiver in `deploy/alertmanager.yml` for email or webhook delivery; no messages are sent by the default configuration.
+
+The monitoring ports remain private. While the services instance is running, create an SSH tunnel:
+
+```powershell
+ssh -p 2222 -i <private-key> `
+  -L 3000:127.0.0.1:3000 `
+  -L 9090:127.0.0.1:9090 `
+  -L 9093:127.0.0.1:9093 `
+  ubuntu@<services-public-ip>
+```
+
+Then use `http://localhost:3000` for Grafana, `http://localhost:9090` for Prometheus, and `http://localhost:9093` for Alertmanager.
+
+## Destroying the AWS environment
+
+Use the repository script after each temporary demonstration:
+
+```powershell
+./scripts/Destroy-AwsEnvironment.ps1
+terraform -chdir=teraform state list
+```
+
+The script runs `terraform destroy`, verifies that no tracked resource remains, removes the obsolete Jenkins address file, and writes `logs/terraform-destroy.log`. An empty state proves only that the selected Terraform state is empty. It does not remove manually created AWS resources or a separate CloudFormation stack. Confirm the result in AWS Resource Explorer and Cost Explorer. Jenkins, Docker Desktop, ngrok, Prometheus, Grafana, and Alertmanager run locally and are outside `terraform destroy`.
+
+## Troubleshooting
+
+### A push does not trigger Jenkins
+
+1. Confirm the commit is visible on GitHub and belongs to `master`.
+2. Confirm Jenkins is running at `http://localhost:8081`.
+3. Start or inspect the ngrok tunnel.
+4. Confirm the GitHub webhook contains the current ngrok hostname and correct trigger endpoint.
+5. Inspect **Recent Deliveries** in GitHub; a successful delivery must receive a successful HTTP response.
+6. Confirm the payload reference is `refs/heads/master`.
+
+### Jenkins runs CI but skips deployment
+
+Deployment is skipped when all target values are blank. Start the environment with `Start-EphemeralAwsEnvironment.ps1`, check that the Jenkins deployment address file exists, or supply all four build parameters: `DEPLOY_HOST`, `APP_PRIVATE_IP`, `SERVICES_HOST`, and `SCANNER_PRIVATE_IP`. A partial set is rejected.
+
+### Jenkins cannot use Docker
+
+Start Docker Desktop, select Linux containers, and verify `docker version` from the Windows account running the Jenkins service. The pipeline expects the Docker Engine at `tcp://127.0.0.1:2375` in this local setup.
+
+### HTTPS is unavailable
+
+Confirm AWS allows ports 80 and 443, the `nip.io` hostname contains the current app IP, and Caddy can reach the internet to obtain its certificate. Inspect `docker compose logs caddy` on the application node.
+
+### Uploads fail after deployment
+
+ClamAV may still be loading signatures. Check its health on the services node and verify private VPC connectivity from the app node to scanner port 3310.
+
+### Backup or deployment reports permission denied
+
+Runtime secrets and volumes deliberately have restrictive ownership. Use the supplied deployment and backup scripts with their documented `sudo` behavior; do not make secrets world-readable.
+
+## Evaluation evidence checklist
+
+Capture the following while the temporary environment is available:
+
+1. The GitHub commit and successful webhook delivery.
+2. Jenkins stage view showing checkout, testing, scans, image push, deployment, and verification.
+3. The 24-test result and archived TRX test artifact.
+4. Archived Trivy JSON reports and the HIGH/CRITICAL gate result.
+5. Terraform plan/output and AWS resources carrying the `Project=SecureShare` tag.
+6. The Docker Hub image tagged with the full deployed Git commit.
+7. The public HTTPS application and `/health/ready` returning HTTP 200.
+8. Healthy containers on both EC2 nodes.
+9. Grafana dashboards, Prometheus targets, and Alertmanager status.
+10. An encrypted `.tar.gz.gpg` backup with restrictive permissions.
+11. `terraform destroy` followed by an empty `terraform state list`.
+
+Never include `.env`, AWS credentials, SSH private keys, certificate or backup passwords, Terraform state, session cookies, CSRF tokens, recovery codes, or unredacted Jenkins credentials in submitted screenshots.
+
+## Known limitations and future work
+
+- Only one API instance can write to the current local encrypted-file volume and SQLite database.
+- Rate limiting is local to the application process.
+- Horizontal scaling requires shared object storage, a shared database, distributed rate-limit coordination, and a load balancer.
+- The private subnet is reserved for a future private data tier and currently contains no instance.
+- Terraform state is local; team use requires a private encrypted remote backend with locking.
+- Alertmanager has no external notification receiver by default.
+- Software bill of materials generation and image signing remain future supply-chain controls.
+- Free Tier eligibility and credits depend on the AWS account and current AWS terms.
+
+These limits are recorded so evaluation can distinguish implemented controls from proposed extensions.
 
 ## Project layout
 
