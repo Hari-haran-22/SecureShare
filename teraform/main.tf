@@ -425,6 +425,10 @@ resource "aws_instance" "app_server" {
   user_data = <<-EOF
     #!/bin/bash
     set -euo pipefail
+    install -d -m 0755 /etc/ssh/sshd_config.d
+    printf 'Port ${var.ssh_port}\n' > /etc/ssh/sshd_config.d/99-secureshare-port.conf
+    systemctl disable --now ssh.socket || true
+    systemctl enable --now ssh.service
     apt-get update
     apt-get install -y ca-certificates curl git
     install -m 0755 -d /etc/apt/keyrings
@@ -476,6 +480,10 @@ resource "aws_instance" "services_server" {
   user_data = <<-EOF
     #!/bin/bash
     set -euo pipefail
+    install -d -m 0755 /etc/ssh/sshd_config.d
+    printf 'Port ${var.ssh_port}\n' > /etc/ssh/sshd_config.d/99-secureshare-port.conf
+    systemctl disable --now ssh.socket || true
+    systemctl enable --now ssh.service
     apt-get update
     apt-get install -y ca-certificates curl git
     install -m 0755 -d /etc/apt/keyrings
